@@ -1,0 +1,6 @@
+{
+  "name": "Nawabi Safar",
+  "description": "Discover Lucknow. Find Your Vibe. Experience the City — A premier digital tourism, local discovery, and heritage exploration platform with interactive maps and full CMS control.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
