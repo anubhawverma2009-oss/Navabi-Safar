@@ -100,6 +100,15 @@ export interface VibeInfo {
   coverImage?: string;
 }
 
+export type BusinessStatus = 
+  | 'published' 
+  | 'approved' 
+  | 'pending' 
+  | 'under_review' 
+  | 'rejected' 
+  | 'suspended' 
+  | 'draft';
+
 export interface LocalBusiness {
   id: string;
   name: string;
@@ -109,11 +118,53 @@ export interface LocalBusiness {
   area: string;
   contactNumber: string;
   image: string;
+  images?: string[];
   websiteUrl?: string;
   specialty: string;
   featured: boolean;
-  status: 'published' | 'draft';
+  status: BusinessStatus;
+  ownerName?: string;
+  ownerEmail?: string;
+  ownerPhone?: string;
+  partnerId?: string;
+  openingHours?: string;
+  priceRange?: '₹' | '₹₹' | '₹₹₹' | '₹₹₹₹';
+  rejectionReason?: string;
+  adminNotes?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
   createdAt: string;
+}
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user';
+  avatar?: string;
+  location?: string;
+  bio?: string;
+  savedBookmarkCount?: number;
+  createdAt: string;
+}
+
+export interface BusinessPartnerAccount {
+  id: string;
+  email: string;
+  businessName: string;
+  ownerName: string;
+  phone: string;
+  category: LocalBusiness['category'];
+  role: 'partner';
+  businessId?: string;
+  createdAt: string;
+}
+
+export interface PublicSessionState {
+  isAuthenticated: boolean;
+  accountType: 'user' | 'partner' | null;
+  user: UserAccount | null;
+  partner: BusinessPartnerAccount | null;
 }
 
 export interface EmergencyService {
@@ -175,4 +226,96 @@ export interface FilterState {
   onlyFeatured: boolean;
   onlyHiddenGems: boolean;
   sortBy: 'featured' | 'name' | 'budget-asc' | 'budget-desc' | 'newest';
+}
+
+export type VisitExperience = 
+  | 'Solo Explorer' 
+  | 'Family Trip' 
+  | 'Friends Group' 
+  | 'Couples & Romantic' 
+  | 'Heritage Enthusiast' 
+  | 'Foodie / Culinary Walk' 
+  | 'Photography Tour' 
+  | 'Local Resident';
+
+export interface PlaceReview {
+  id: string;
+  placeId: string;
+  placeName?: string;
+  userName: string;
+  userLocation?: string;
+  rating: number; // 1 to 5
+  reviewText: string;
+  visitExperience?: VisitExperience;
+  visitedDate?: string;
+  createdAt: string;
+  status: 'published' | 'hidden' | 'pending';
+  helpfulVotes?: number;
+}
+
+export type PlatformFeedbackCategory = 
+  | 'overall' 
+  | 'navigation' 
+  | 'map' 
+  | 'planner' 
+  | 'speed' 
+  | 'content_quality' 
+  | 'design_ui';
+
+export interface PlatformFeedback {
+  id: string;
+  category: PlatformFeedbackCategory;
+  rating: number; // 1 to 5
+  message: string;
+  userName?: string;
+  email?: string;
+  createdAt: string;
+  status: 'pending' | 'reviewed' | 'resolved';
+}
+
+export type SuggestionCategory = 
+  | 'new_place' 
+  | 'hidden_gem' 
+  | 'new_category' 
+  | 'feature_idea' 
+  | 'cultural_story' 
+  | 'improvement';
+
+export interface Suggestion {
+  id: string;
+  category: SuggestionCategory;
+  title: string;
+  description: string;
+  locationArea?: string;
+  suggestedBy?: string;
+  contactEmail?: string;
+  createdAt: string;
+  status: 'pending' | 'under_review' | 'planned' | 'implemented' | 'archived';
+}
+
+export type IssueReportType = 
+  | 'incorrect_timing' 
+  | 'wrong_location' 
+  | 'incorrect_pricing' 
+  | 'outdated_info' 
+  | 'broken_image_link' 
+  | 'safety_concern' 
+  | 'other';
+
+export interface IssueReport {
+  id: string;
+  placeId?: string;
+  placeName?: string;
+  issueType: IssueReportType;
+  description: string;
+  reportedBy?: string;
+  contactEmail?: string;
+  createdAt: string;
+  status: 'pending' | 'investigating' | 'resolved' | 'dismissed';
+  adminNotes?: string;
+}
+
+export interface ReviewFilterOptions {
+  sortBy: 'recent' | 'highest' | 'lowest';
+  ratingFilter: number | 'all';
 }

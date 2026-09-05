@@ -96,9 +96,12 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             <span className="font-medium truncate max-w-[150px]">{place.area}</span>
           </div>
           {place.rating && (
-            <div className="flex items-center gap-1 bg-amber-500/90 text-stone-950 font-bold px-2 py-0.5 rounded-md text-xs backdrop-blur-sm">
+            <div className="flex items-center gap-1 bg-amber-500/95 text-stone-950 font-bold px-2 py-0.5 rounded-md text-xs backdrop-blur-sm shadow-xs">
               <Star className="w-3 h-3 fill-stone-950" />
               <span>{place.rating.toFixed(1)}</span>
+              {place.reviewCount !== undefined && place.reviewCount > 0 && (
+                <span className="text-[10px] text-stone-900/80 font-normal">({place.reviewCount})</span>
+              )}
             </div>
           )}
         </div>

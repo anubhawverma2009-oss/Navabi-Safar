@@ -1,11 +1,16 @@
 import React from 'react';
 import { Compass, Database, Shield, Zap, Sparkles, Map, Heart, Code2, Users } from 'lucide-react';
+import { useHiddenAdminTrigger } from '../utils/useHiddenAdminTrigger';
 
 interface AboutPlatformPageProps {
   onNavigate: (route: string) => void;
 }
 
 export const AboutPlatformPage: React.FC<AboutPlatformPageProps> = ({ onNavigate }) => {
+  const handleAdminTrigger = useHiddenAdminTrigger(() => {
+    onNavigate('/admin/login');
+  }, 3, 1800);
+
   return (
     <div className="w-full min-h-screen bg-[#FAF8F5] py-12" id="about-platform-nawabi-safar">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
@@ -78,8 +83,8 @@ export const AboutPlatformPage: React.FC<AboutPlatformPageProps> = ({ onNavigate
               Explore Destinations
             </button>
             <button
-              onClick={() => onNavigate('/admin/login')}
-              className="px-6 py-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold text-xs sm:text-sm border border-stone-700 transition-all"
+              onClick={handleAdminTrigger}
+              className="px-6 py-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold text-xs sm:text-sm border border-stone-700 transition-all cursor-pointer"
             >
               Curator Login
             </button>

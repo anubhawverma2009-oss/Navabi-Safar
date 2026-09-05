@@ -1,11 +1,16 @@
 import React from 'react';
-import { Landmark, Compass, Map, ShieldAlert, Calendar, Store, Heart, Sparkles, Phone, ArrowUpRight } from 'lucide-react';
+import { Landmark, Compass, Map, ShieldAlert, Calendar, Store, Heart, Sparkles, Phone, ArrowUpRight, MessageSquare } from 'lucide-react';
+import { useHiddenAdminTrigger } from '../../utils/useHiddenAdminTrigger';
 
 interface FooterProps {
   onNavigate: (route: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const handleAdminTrigger = useHiddenAdminTrigger(() => {
+    onNavigate('/admin/login');
+  }, 3, 1800);
+
   return (
     <footer className="w-full bg-[#141210] text-stone-300 border-t border-stone-800 lucknow-pattern pt-16 pb-12" id="main-nawabi-safar-footer">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -133,6 +138,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                 </button>
               </li>
               <li>
+                <button onClick={() => onNavigate('/feedback')} className="hover:text-amber-400 transition-colors flex items-center gap-1">
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                  Feedback & Community Reviews
+                </button>
+              </li>
+              <li>
                 <button onClick={() => onNavigate('/about-lucknow')} className="hover:text-amber-400 transition-colors">
                   About Lucknow’s History
                 </button>
@@ -182,7 +193,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               Platform Architecture
             </button>
             <span>•</span>
-            <button onClick={() => onNavigate('/admin/login')} className="hover:text-amber-400 font-medium">
+            <button onClick={handleAdminTrigger} className="hover:text-amber-400 font-medium cursor-pointer" id="footer-admin-login-btn">
               Admin Login
             </button>
           </div>

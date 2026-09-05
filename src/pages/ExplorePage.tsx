@@ -58,9 +58,16 @@ export const ExplorePage: React.FC<ExplorePageProps> = ({
       setShowOnlySaved(true);
     }
 
-    const loaded = PlaceService.getPublishedPlaces();
-    setPlaces(loaded);
-    setSavedPlaceIds(StorageService.getBookmarks());
+    const loadAll = () => {
+      setPlaces(PlaceService.getPublishedPlaces());
+      setSavedPlaceIds(StorageService.getBookmarks());
+      setCategories(StorageService.getCategories());
+      setVibes(StorageService.getVibes());
+    };
+
+    loadAll();
+    const unsubscribe = StorageService.subscribe(loadAll);
+    return () => unsubscribe();
   }, []);
 
   // Unique areas in Lucknow from data

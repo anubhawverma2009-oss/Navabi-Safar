@@ -22,6 +22,7 @@ import { BusinessesPage } from './pages/BusinessesPage';
 import { EmergencyPage } from './pages/EmergencyPage';
 import { AboutLucknowPage } from './pages/AboutLucknowPage';
 import { AboutPlatformPage } from './pages/AboutPlatformPage';
+import { FeedbackPage } from './pages/FeedbackPage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { Place, PlaceCategory, PlaceVibe } from './types';
@@ -145,6 +146,15 @@ export default function App() {
 
       case '/about':
         return <AboutPlatformPage onNavigate={navigate} />;
+
+      case '/feedback':
+      case '/reviews':
+        return (
+          <FeedbackPage
+            onNavigate={navigate}
+            initialTab={(params.get('tab') as any) || 'place'}
+          />
+        );
 
       case '/admin/login':
         return (

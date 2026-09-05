@@ -28,11 +28,18 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     const updatedStats = StorageService.incrementVisitorCount();
     setStats(updatedStats);
 
-    const loadedPlaces = PlaceService.getPublishedPlaces();
-    setPlaces(loadedPlaces);
-    setCategories(StorageService.getCategories().filter(c => c.enabled));
-    setVibes(StorageService.getVibes());
-    setBusinesses(StorageService.getBusinesses().filter(b => b.status === 'published' && b.featured));
+    const loadAll = () => {
+      setPlaces(PlaceService.getPublishedPlaces());
+      setCategories(StorageService.getCategories().filter(c => c.enabled));
+      setVibes(StorageService.getVibes());
+      setBusinesses(StorageService.getBusinesses().filter(b => b.status === 'published' && b.featured));
+      setStats(StorageService.getStats());
+    };
+
+    loadAll();
+
+    const unsubscribe = StorageService.subscribe(loadAll);
+    return () => unsubscribe();
   }, []);
 
   const featuredPlaces = places.filter(p => p.featured).slice(0, 6);

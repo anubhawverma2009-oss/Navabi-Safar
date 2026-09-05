@@ -1,9 +1,10 @@
 import React from 'react';
 import { 
   X, Landmark, Utensils, ShoppingBag, Trees, Music, Sparkles, 
-  Map, Compass, Gem, Calendar, Store, Info, PhoneCall, Home, 
-  ChevronRight, ShieldAlert, Heart, Flame
+  Map, Compass, Gem, Calendar, Store, Info, Home, 
+  ChevronRight, ShieldAlert, Flame, MessageSquare
 } from 'lucide-react';
+import { useHiddenAdminTrigger } from '../../utils/useHiddenAdminTrigger';
 
 interface MobileDrawerProps {
   isOpen: boolean;
@@ -21,6 +22,12 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onNavigate
 }) => {
   const currentRoute = propCurrentRoute || currentPath || '/';
+
+  const handleAdminTrigger = useHiddenAdminTrigger(() => {
+    onClose();
+    onNavigate('/admin/login');
+  }, 3, 1800);
+
   if (!isOpen) return null;
 
   const menuSections = [
@@ -52,6 +59,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
       title: 'Local & Heritage Guides',
       items: [
         { label: 'Featured Local Businesses', route: '/businesses', icon: Store },
+        { label: 'Feedback & Reviews', route: '/feedback', icon: MessageSquare, badge: 'Community' },
         { label: 'About Lucknow (History & Tehzeeb)', route: '/about-lucknow', icon: Landmark },
         { label: 'About Nawabi Safar', route: '/about', icon: Info },
         { label: 'Emergency Services (24x7)', route: '/emergency', icon: ShieldAlert, highlight: true }
@@ -92,20 +100,12 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
+              className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800 transition-colors cursor-pointer"
               aria-label="Close Menu"
               id="mobile-drawer-close-btn"
             >
               <X className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Tagline Banner */}
-          <div className="px-5 py-2.5 bg-amber-950/40 border-b border-amber-900/30 flex items-center justify-between text-xs text-amber-200">
-            <span>Discover Lucknow. Find Your Vibe.</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold">
-              Awadh 2026
-            </span>
           </div>
 
           {/* Navigation Links Scrollable Body */}
@@ -124,7 +124,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
                         key={itemIdx}
                         onClick={() => handleItemClick(item.route)}
                         id={`mobile-nav-${item.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                           item.highlight
                             ? 'bg-red-950/50 text-red-300 hover:bg-red-900/70 border border-red-800/40'
                             : isActive
@@ -155,8 +155,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
           {/* Footer of Drawer */}
           <div className="p-4 border-t border-stone-800 bg-stone-950/90 flex flex-col gap-2">
             <button
-              onClick={() => handleItemClick('/admin/login')}
-              className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-stone-400 hover:text-amber-300 bg-stone-800/80 hover:bg-stone-800 text-center transition-colors border border-stone-700"
+              onClick={handleAdminTrigger}
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-stone-400 hover:text-amber-300 bg-stone-800/80 hover:bg-stone-800 text-center transition-colors border border-stone-700 cursor-pointer"
               id="mobile-drawer-admin-btn"
             >
               Curator Admin Access

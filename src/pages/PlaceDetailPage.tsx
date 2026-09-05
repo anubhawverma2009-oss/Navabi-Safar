@@ -3,6 +3,7 @@ import { Place } from '../types';
 import { PlaceService } from '../services/placeService';
 import { StorageService } from '../services/storageService';
 import { PlaceCard } from '../components/common/PlaceCard';
+import { PlaceReviewsSection } from '../components/reviews/PlaceReviewsSection';
 import { 
   MapPin, Clock, IndianRupee, Star, Bookmark, Share2, Sparkles, 
   Gem, CheckCircle2, Navigation, Train, Bus, Car, ArrowLeft, 
@@ -370,7 +371,18 @@ export const PlaceDetailPage: React.FC<PlaceDetailPageProps> = ({ slug, onNaviga
           </div>
         </div>
 
-        {/* 3. NEARBY DESTINATIONS */}
+        {/* 3. REVIEWS & RATINGS SECTION */}
+        <div className="mt-12">
+          <PlaceReviewsSection
+            place={place}
+            onReviewSubmitted={() => {
+              const reloaded = PlaceService.getPlaceBySlug(slug);
+              if (reloaded) setPlace(reloaded);
+            }}
+          />
+        </div>
+
+        {/* 4. NEARBY DESTINATIONS */}
         {nearbyPlaces.length > 0 && (
           <div className="mt-16 pt-12 border-t border-stone-200">
             <div className="flex items-center justify-between mb-8">

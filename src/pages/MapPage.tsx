@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Place, PlaceCategory } from '../types';
 import { PlaceService } from '../services/placeService';
 import { InteractiveLucknowMap } from '../components/map/InteractiveLucknowMap';
-import { Map, Navigation, Layers, Compass, ArrowLeft, Sparkles, MapPin, IndianRupee, Clock, Search, ListFilter, ExternalLink, Calendar } from 'lucide-react';
+import { Map, Navigation, Layers, Compass, ArrowLeft, Sparkles, MapPin, IndianRupee, Clock, Search, ListFilter, ExternalLink, Calendar, Star } from 'lucide-react';
 
 interface MapPageProps {
   onNavigate: (route: string) => void;
@@ -166,6 +166,17 @@ export const MapPage: React.FC<MapPageProps> = ({ onNavigate }) => {
                       <h3 className="text-xl font-bold font-serif-heading text-stone-900 leading-snug">
                         {selectedPlace.name}
                       </h3>
+                      {selectedPlace.rating && (
+                        <div className="flex items-center gap-1.5 mt-1 text-xs">
+                          <div className="flex items-center gap-1 bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md text-[11px]">
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                            <span>{selectedPlace.rating.toFixed(1)}</span>
+                          </div>
+                          <span className="text-stone-500 text-[11px]">
+                            • {selectedPlace.reviewCount || 0} reviews
+                          </span>
+                        </div>
+                      )}
                       <p className="text-xs text-stone-600 mt-2 leading-relaxed">
                         {selectedPlace.shortDescription}
                       </p>

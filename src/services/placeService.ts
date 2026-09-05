@@ -166,6 +166,7 @@ export const PlaceService = {
 
     places.unshift(newPlace);
     StorageService.savePlaces(places);
+    StorageService.savePlaceRemote(newPlace).catch(console.warn);
     return newPlace;
   },
 
@@ -173,12 +174,14 @@ export const PlaceService = {
     const places = StorageService.getPlaces();
     const idx = places.findIndex(p => p.id === id);
     if (idx >= 0) {
-      places[idx] = {
+      const updated: Place = {
         ...places[idx],
         ...updates,
         updatedAt: new Date().toISOString()
       };
+      places[idx] = updated;
       StorageService.savePlaces(places);
+      StorageService.savePlaceRemote(updated).catch(console.warn);
       return true;
     }
     return false;
@@ -203,6 +206,7 @@ export const PlaceService = {
     }
 
     StorageService.savePlaces(places);
+    StorageService.savePlaceRemote(updatedPlace).catch(console.warn);
     return updatedPlace;
   },
 
@@ -211,6 +215,7 @@ export const PlaceService = {
     const filtered = places.filter(p => p.id !== id);
     if (filtered.length !== places.length) {
       StorageService.savePlaces(filtered);
+      StorageService.deletePlaceRemote(id).catch(console.warn);
       return true;
     }
     return false;
@@ -223,6 +228,7 @@ export const PlaceService = {
       place.featured = !place.featured;
       place.updatedAt = new Date().toISOString();
       StorageService.savePlaces(places);
+      StorageService.savePlaceRemote(place).catch(console.warn);
       return place.featured;
     }
     return false;
@@ -235,6 +241,7 @@ export const PlaceService = {
       place.hiddenGem = !place.hiddenGem;
       place.updatedAt = new Date().toISOString();
       StorageService.savePlaces(places);
+      StorageService.savePlaceRemote(place).catch(console.warn);
       return place.hiddenGem;
     }
     return false;

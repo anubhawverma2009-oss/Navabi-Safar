@@ -3,18 +3,21 @@ import { Place, LocalBusiness, EmergencyService, CategoryInfo, VibeInfo, PlaceCa
 import { PlaceService } from '../../services/placeService';
 import { StorageService } from '../../services/storageService';
 import { AuthService } from '../../services/authService';
+import { isSupabaseConfigured, testSupabaseConnection } from '../../lib/supabaseClient';
+import { AdminReviewsManager } from '../../components/admin/AdminReviewsManager';
 import { 
   Landmark, Plus, Edit2, Trash2, CheckCircle2, XCircle, Search, 
   Sparkles, Flame, Gem, Store, ShieldAlert, Database, RotateCcw, 
   Save, X, Eye, LogOut, ArrowLeft, Download, Upload, Layers, MapPin, 
-  SlidersHorizontal, Check, RefreshCw
+  SlidersHorizontal, Check, RefreshCw, KeyRound, Lock, ShieldCheck, Cloud, AlertCircle, Copy,
+  MessageSquare, Star, Clock
 } from 'lucide-react';
 
 interface AdminDashboardPageProps {
   onNavigate: (route: string) => void;
 }
 
-type TabType = 'places' | 'businesses' | 'emergency' | 'database';
+type TabType = 'places' | 'businesses' | 'emergency' | 'reviews' | 'database' | 'security';
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<TabType>('places');
@@ -24,6 +27,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Password Management State
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   // Place Modal / Form State
   const [isEditingPlace, setIsEditingPlace] = useState(false);
@@ -96,6 +106,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     enabled: true
   });
 
+  // Supabase Cloud State
+  const [isTestingDb, setIsTestingDb] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState<{ success: boolean; message: string; count?: number } | null>(null);
+  const [isSeedingSupabase, setIsSeedingSupabase] = useState(false);
+  const [seedResult, setSeedResult] = useState<{ success: boolean; message: string } | null>(null);
+
   useEffect(() => {
     // Check if user is logged in
     if (!AuthService.isLoggedIn()) {
@@ -103,12 +119,58 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       return;
     }
     loadData();
+
+    // Subscribe to remote storage sync updates
+    const unsubscribe = StorageService.subscribe(() => {
+      loadData();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const loadData = () => {
     setPlaces(PlaceService.getAllPlaces());
     setBusinesses(StorageService.getBusinesses());
     setEmergencyServices(StorageService.getEmergencyServices());
+  };
+
+  const handleTestSupabase = async () => {
+    setIsTestingDb(true);
+    setDbTestResult(null);
+    try {
+      const res = await testSupabaseConnection();
+      setDbTestResult(res);
+      if (res.success) {
+        showNotification('Successfully connected to Supabase PostgreSQL database!');
+      } else {
+        showNotification(res.message, 'error');
+      }
+    } catch (e: any) {
+      setDbTestResult({ success: false, message: e.message || 'Connection test failed' });
+    } finally {
+      setIsTestingDb(false);
+    }
+  };
+
+  const handleSyncSeedToSupabase = async () => {
+    setIsSeedingSupabase(true);
+    setSeedResult(null);
+    try {
+      const res = await StorageService.syncSeedToSupabase();
+      setSeedResult(res);
+      if (res.success) {
+        showNotification(res.message);
+        loadData();
+      } else {
+        showNotification(res.message, 'error');
+      }
+    } catch (e: any) {
+      setSeedResult({ success: false, message: e.message || 'Seed migration failed' });
+    } finally {
+      setIsSeedingSupabase(false);
+    }
   };
 
   const showNotification = (text: string, type: 'success' | 'error' = 'success') => {
@@ -354,6 +416,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     reader.readAsText(file);
   };
 
+  const handlePasswordChangeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('New password and confirmation password do not match.');
+      return;
+    }
+
+    const res = AuthService.changePassword(currentPassword, newPassword);
+    if (res.success) {
+      showNotification('Administrator password updated successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setIsChangingPassword(false);
+    } else {
+      setPasswordError(res.error || 'Failed to update administrator password.');
+    }
+  };
+
   // Filtered places
   const filteredPlaces = places.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -393,8 +481,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
               Curator: <strong>{AuthService.getCurrentUser()?.email}</strong>
             </span>
             <button
+              onClick={() => {
+                setPasswordError(null);
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmNewPassword('');
+                setIsChangingPassword(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-amber-400 hover:text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-stone-700 cursor-pointer"
+              id="admin-change-pwd-header-btn"
+              title="Change Administrator Password"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Change Password</span>
+            </button>
+            <button
               onClick={handleLogout}
-              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               id="admin-logout-btn"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -458,19 +561,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
         {/* TAB CONTROLS */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1">
             {[
               { id: 'places', label: `Destinations (${places.length})`, icon: Landmark },
               { id: 'businesses', label: `Local Businesses (${businesses.length})`, icon: Store },
               { id: 'emergency', label: `Emergency Contacts (${emergencyServices.length})`, icon: ShieldAlert },
-              { id: 'database', label: 'Database & Backup', icon: Database }
+              { id: 'reviews', label: 'Reviews & Feedback', icon: MessageSquare },
+              { id: 'database', label: 'Database & Backup', icon: Database },
+              { id: 'security', label: 'Security & Password', icon: KeyRound }
             ].map(tab => {
               const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabType)}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
                     activeTab === tab.id
                       ? 'bg-amber-700 text-white shadow-md'
                       : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-50'
@@ -486,7 +591,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
           {activeTab === 'places' && (
             <button
               onClick={handleOpenNewPlace}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
               id="admin-add-new-place-btn"
             >
               <Plus className="w-4 h-4" />
@@ -497,7 +602,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
           {activeTab === 'businesses' && (
             <button
               onClick={handleOpenNewBusiness}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Add Local Business</span>
@@ -507,7 +612,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
           {activeTab === 'emergency' && (
             <button
               onClick={handleOpenNewEmergency}
-              className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Add Emergency Helpline</span>
@@ -668,6 +773,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
         {/* TAB 2: LOCAL BUSINESSES */}
         {activeTab === 'businesses' && (
           <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
+              <div className="text-xs text-stone-600">
+                Displaying <strong>{businesses.length}</strong> local merchants registered on Nawabi Safar.
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {businesses.map(b => (
                 <div key={b.id} className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm flex flex-col justify-between">
@@ -685,7 +796,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                     <h4 className="font-bold text-stone-900 text-base">{b.name}</h4>
                     <p className="text-xs text-amber-800 font-medium">{b.specialty}</p>
                     <p className="text-xs text-stone-600 mt-2 line-clamp-2">{b.description}</p>
-                    <div className="mt-3 text-xs text-stone-500">
+                    <div className="mt-3 text-xs text-stone-500 space-y-0.5">
+                      {b.ownerName && <div><strong>Owner:</strong> {b.ownerName}</div>}
                       <div><strong>Phone:</strong> {b.contactNumber}</div>
                       <div><strong>Area:</strong> {b.area}</div>
                     </div>
@@ -698,13 +810,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                         setBusinessFormData({ ...b });
                         setIsEditingBusiness(true);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100"
+                      className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 cursor-pointer"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDeleteBusiness(b.id)}
-                      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-semibold hover:bg-red-100"
+                      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs font-semibold hover:bg-red-100 cursor-pointer"
                     >
                       Delete
                     </button>
@@ -763,26 +875,133 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
         {/* TAB 4: DATABASE & BACKUPS */}
         {activeTab === 'database' && (
-          <div className="max-w-3xl space-y-6">
+          <div className="max-w-4xl space-y-6">
+            {/* Supabase Cloud Relational Database Card */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Cloud className="w-5 h-5 text-amber-600" />
+                    <h3 className="text-xl font-bold font-serif-heading text-stone-900">
+                      Supabase Cloud PostgreSQL Database
+                    </h3>
+                  </div>
+                  <p className="text-xs sm:text-sm text-stone-600 mt-1">
+                    Centralized multi-device synchronization engine for tourist places, artisan shops, and emergency directories.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {isSupabaseConfigured() ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Cloud Sync Ready
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      LocalStorage Fallback Active
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Status and Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  onClick={handleTestSupabase}
+                  disabled={isTestingDb}
+                  className="p-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white text-left transition-colors flex items-start gap-3 disabled:opacity-50 cursor-pointer"
+                  id="admin-test-supabase-btn"
+                >
+                  <RefreshCw className={`w-5 h-5 text-amber-400 shrink-0 mt-0.5 ${isTestingDb ? 'animate-spin' : ''}`} />
+                  <div>
+                    <div className="font-bold text-xs sm:text-sm">
+                      {isTestingDb ? 'Testing Connection...' : 'Test Supabase Connection'}
+                    </div>
+                    <div className="text-[11px] text-stone-400 mt-0.5">
+                      Verify live read/write capability to remote PostgreSQL instance.
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleSyncSeedToSupabase}
+                  disabled={isSeedingSupabase || !isSupabaseConfigured()}
+                  className="p-4 rounded-2xl bg-amber-800 hover:bg-amber-900 text-white text-left transition-colors flex items-start gap-3 disabled:opacity-50 cursor-pointer"
+                  id="admin-seed-supabase-btn"
+                >
+                  <CheckCircle2 className={`w-5 h-5 text-amber-300 shrink-0 mt-0.5 ${isSeedingSupabase ? 'animate-pulse' : ''}`} />
+                  <div>
+                    <div className="font-bold text-xs sm:text-sm">
+                      {isSeedingSupabase ? 'Migrating Data...' : 'Sync & Seed to Supabase'}
+                    </div>
+                    <div className="text-[11px] text-amber-200 mt-0.5">
+                      Upload all {places.length} places & businesses to cloud database without duplicates.
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Database Test Alert */}
+              {dbTestResult && (
+                <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-medium ${
+                  dbTestResult.success 
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                    : 'bg-red-50 text-red-800 border-red-200'
+                }`}>
+                  <div className="font-bold flex items-center gap-1.5">
+                    {dbTestResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-red-600" />}
+                    {dbTestResult.success ? 'Supabase Connection Verified' : 'Supabase Connection Notice'}
+                  </div>
+                  <div className="mt-1 text-xs opacity-90">{dbTestResult.message}</div>
+                </div>
+              )}
+
+              {/* Seed Migration Alert */}
+              {seedResult && (
+                <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-medium ${
+                  seedResult.success 
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}>
+                  <div className="font-bold">{seedResult.success ? 'Cloud Migration Complete' : 'Migration Result'}</div>
+                  <div className="mt-1 text-xs opacity-90">{seedResult.message}</div>
+                </div>
+              )}
+
+              {/* Architecture & SQL Schema Reference */}
+              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-xs text-stone-700 space-y-2">
+                <div className="font-bold text-stone-900 flex items-center justify-between">
+                  <span>Database Configuration Guide (.env)</span>
+                  <span className="text-[10px] font-mono bg-stone-200 px-2 py-0.5 rounded text-stone-800">supabase_schema.sql</span>
+                </div>
+                <p className="text-stone-600 leading-relaxed">
+                  To connect your custom Supabase project, supply <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in project settings. Run <code>supabase_schema.sql</code> in your Supabase SQL editor to create all required tables (<code>places</code>, <code>local_businesses</code>, <code>emergency_services</code>) with Row Level Security.
+                </p>
+              </div>
+            </div>
+
+            {/* Local Backup & Reset Card */}
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-6">
               <div>
                 <h3 className="text-xl font-bold font-serif-heading text-stone-900">
-                  Data Persistence & Factory Reset
+                  JSON Backups & Local Cache Operations
                 </h3>
                 <p className="text-xs sm:text-sm text-stone-600 mt-1">
-                  Nawabi Safar uses browser storage persistence with export/import JSON capabilities. You can reset anytime to restore authentic Lucknow records.
+                  Download offline snapshot backups or restore database state from any previously exported JSON bundle.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   onClick={handleExportJSON}
-                  className="p-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white text-left transition-colors flex items-start gap-3"
+                  className="p-4 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white text-left transition-colors flex items-start gap-3 cursor-pointer"
                 >
                   <Download className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                   <div>
                     <div className="font-bold text-xs sm:text-sm">Export Full Database (.json)</div>
-                    <div className="text-[11px] text-stone-400 mt-0.5">Download current places, businesses, and settings.</div>
+                    <div className="text-[11px] text-stone-400 mt-0.5">Download snapshot of all places, businesses, and settings.</div>
                   </div>
                 </button>
 
@@ -807,7 +1026,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
                   <button
                     onClick={handleResetDatabase}
-                    className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow shrink-0 flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs shadow shrink-0 flex items-center gap-1.5 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Reset Database</span>
@@ -815,6 +1034,119 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB 4: REVIEWS & FEEDBACK */}
+        {activeTab === 'reviews' && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm space-y-6">
+            <div>
+              <div className="flex items-center gap-2 text-amber-800 text-xs font-bold uppercase tracking-wider mb-1">
+                <MessageSquare className="w-4 h-4" />
+                <span>Visitor Feedback & Review Moderation</span>
+              </div>
+              <h3 className="text-2xl font-bold font-serif-heading text-stone-900">
+                Reviews, Ratings & Community Suggestions
+              </h3>
+              <p className="text-xs text-stone-500 mt-1">
+                Moderate visitor destination reviews, review platform ratings, track community suggestions, and resolve reported inaccuracies.
+              </p>
+            </div>
+
+            <AdminReviewsManager />
+          </div>
+        )}
+
+        {/* TAB 5: SECURITY & PASSWORD */}
+        {activeTab === 'security' && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-sm max-w-2xl mx-auto space-y-6">
+            <div>
+              <div className="flex items-center gap-2 text-amber-800 text-xs font-bold uppercase tracking-wider mb-1">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Administrator Security & Credentials</span>
+              </div>
+              <h3 className="text-2xl font-bold font-serif-heading text-stone-900">Change Admin Password</h3>
+              <p className="text-xs text-stone-500 mt-1">
+                Update the master administrator access password for Nawabi Safar curator management.
+              </p>
+            </div>
+
+            {passwordError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{passwordError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordChangeSubmit} className="space-y-4" autoComplete="off">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-stone-600 block mb-1.5">
+                  Current Password *
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    placeholder="Enter current administrator password"
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    id="admin-change-current-pwd-input"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-stone-600 block mb-1.5">
+                  New Password *
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Enter new password (min. 6 characters)"
+                    autoComplete="new-password"
+                    className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    id="admin-change-new-pwd-input"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-stone-600 block mb-1.5">
+                  Confirm New Password *
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={confirmNewPassword}
+                    onChange={e => setConfirmNewPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    autoComplete="new-password"
+                    className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    id="admin-change-confirm-pwd-input"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  id="admin-change-pwd-submit-btn"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Password</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>
@@ -1112,26 +1444,72 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       {/* ------------------------------------------------------------- */}
       {isEditingBusiness && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-5">
               <h3 className="text-xl font-bold font-serif-heading text-stone-900">
                 {editingBusinessId ? 'Edit Local Merchant' : 'Add Local Merchant'}
               </h3>
-              <button onClick={() => setIsEditingBusiness(false)}>
-                <X className="w-5 h-5 text-stone-500" />
+              <button onClick={() => setIsEditingBusiness(false)} className="p-1 text-stone-400 hover:text-stone-700">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveBusiness} className="space-y-4 text-xs sm:text-sm">
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Business Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={businessFormData.name || ''}
-                  onChange={e => setBusinessFormData({ ...businessFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Business Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={businessFormData.name || ''}
+                    onChange={e => setBusinessFormData({ ...businessFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Category</label>
+                  <select
+                    value={businessFormData.category || 'food'}
+                    onChange={e => setBusinessFormData({ ...businessFormData, category: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
+                  >
+                    <option value="food">Food & Awadhi Delicacies</option>
+                    <option value="craft">Chikan & Handicrafts</option>
+                    <option value="attar">Perfumes & Attar</option>
+                    <option value="jewelry">Jewelry & Antiques</option>
+                    <option value="heritage">Heritage Goods & Souvenirs</option>
+                    <option value="services">Local Guides & Services</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Price Range</label>
+                  <select
+                    value={businessFormData.priceRange || '₹₹'}
+                    onChange={e => setBusinessFormData({ ...businessFormData, priceRange: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
+                  >
+                    <option value="₹">₹ - Budget Friendly</option>
+                    <option value="₹₹">₹₹ - Moderate</option>
+                    <option value="₹₹₹">₹₹₹ - Premium</option>
+                    <option value="₹₹₹₹">₹₹₹₹ - Royal Luxury</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center pt-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={businessFormData.featured || false}
+                      onChange={e => setBusinessFormData({ ...businessFormData, featured: e.target.checked })}
+                      className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="font-bold text-stone-700">Featured Business</span>
+                  </label>
+                </div>
               </div>
 
               <div>
@@ -1141,6 +1519,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   required
                   value={businessFormData.specialty || ''}
                   onChange={e => setBusinessFormData({ ...businessFormData, specialty: e.target.value })}
+                  placeholder="e.g. Authentic Galawati Kebabs Since 1905"
                   className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
                 />
               </div>
@@ -1157,6 +1536,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="font-bold text-stone-700 block mb-1">Owner / Manager Name</label>
+                  <input
+                    type="text"
+                    value={businessFormData.ownerName || ''}
+                    onChange={e => setBusinessFormData({ ...businessFormData, ownerName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
+                  />
+                </div>
+                <div>
                   <label className="font-bold text-stone-700 block mb-1">Phone Number</label>
                   <input
                     type="text"
@@ -1165,8 +1553,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                     className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-stone-700 block mb-1">Area</label>
+                  <label className="font-bold text-stone-700 block mb-1">Area / Neighborhood</label>
                   <input
                     type="text"
                     value={businessFormData.area || ''}
@@ -1174,6 +1565,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                     className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
                   />
                 </div>
+                <div>
+                  <label className="font-bold text-stone-700 block mb-1">Operating Hours</label>
+                  <input
+                    type="text"
+                    value={businessFormData.openingHours || ''}
+                    onChange={e => setBusinessFormData({ ...businessFormData, openingHours: e.target.value })}
+                    placeholder="e.g. 10:00 AM - 10:00 PM"
+                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Full Address</label>
+                <input
+                  type="text"
+                  value={businessFormData.address || ''}
+                  onChange={e => setBusinessFormData({ ...businessFormData, address: e.target.value })}
+                  placeholder="e.g. Shop 14, Aminabad Market, Lucknow"
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
+                />
               </div>
 
               <div>
@@ -1186,19 +1598,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                 />
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-2">
+              <div className="pt-4 flex items-center justify-end gap-2 border-t border-stone-200">
                 <button
                   type="button"
                   onClick={() => setIsEditingBusiness(false)}
-                  className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700"
+                  className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 text-stone-950 font-bold"
+                  className="px-5 py-2 rounded-xl bg-amber-600 text-stone-950 font-bold shadow-md hover:bg-amber-500 transition-colors"
                 >
-                  Save Business
+                  Save Business Record
                 </button>
               </div>
             </form>
@@ -1283,6 +1695,108 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
                   className="px-5 py-2 rounded-xl bg-red-700 text-white font-bold"
                 >
                   Save Helpline
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* CHANGE PASSWORD MODAL */}
+      {/* ------------------------------------------------------------- */}
+      {isChangingPassword && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-stone-200 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200 mb-6">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-900">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-serif-heading text-stone-900">
+                    Change Admin Password
+                  </h3>
+                  <p className="text-[11px] text-stone-500">Update curator authentication key</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsChangingPassword(false)}
+                className="p-2 rounded-full hover:bg-stone-100 text-stone-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {passwordError && (
+              <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{passwordError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordChangeSubmit} className="space-y-4 text-xs sm:text-sm" autoComplete="off">
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Current Password *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    placeholder="Enter current password"
+                    autoComplete="current-password"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-300 bg-stone-50 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">New Password *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Enter new password (min. 6 chars)"
+                    autoComplete="new-password"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-300 bg-stone-50 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-stone-700 block mb-1">Confirm New Password *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={confirmNewPassword}
+                    onChange={e => setConfirmNewPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    autoComplete="new-password"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-300 bg-stone-50 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsChangingPassword(false)}
+                  className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow cursor-pointer"
+                >
+                  Save Password
                 </button>
               </div>
             </form>

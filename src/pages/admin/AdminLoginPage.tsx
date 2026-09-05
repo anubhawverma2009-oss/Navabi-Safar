@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthService } from '../../services/authService';
-import { ShieldCheck, Lock, Mail, ArrowLeft, Key, Sparkles } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 interface AdminLoginPageProps {
   onNavigate: (route: string) => void;
@@ -8,32 +8,111 @@ interface AdminLoginPageProps {
 }
 
 export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate, onLoginSuccess }) => {
-  const [email, setEmail] = useState('admin@nawabisafar.in');
-  const [password, setPassword] = useState('lucknow@2026');
+  const [viewMode, setViewMode] = useState<'login' | 'forgot_email' | 'forgot_reset'>('login');
+  
+  // Login State - Initialized empty on every visit
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Forgot Password State
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Explicitly reset login form and wipe password state on mount
+  useEffect(() => {
+    setEmail('');
+    setPassword('');
+    setError(null);
+    setSuccessMsg(null);
+    setLoading(false);
+  }, []);
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessMsg(null);
     setLoading(true);
 
-    setTimeout(() => {
-      const success = AuthService.login(email, password);
+    try {
+      const res = await AuthService.login(email, password);
       setLoading(false);
-      if (success) {
+      if (res.success) {
+        // Clear password in memory before redirect
+        setPassword('');
         onLoginSuccess();
         onNavigate('/admin/dashboard');
       } else {
-        setError('Invalid administrator email or password. Please check your credentials.');
+        setError(res.error || 'Invalid administrator email or password. Please verify your credentials.');
       }
-    }, 400);
+    } catch (err: any) {
+      setLoading(false);
+      setError(err?.message || 'Login failed. Please verify your credentials.');
+    }
   };
 
-  const handleFillDemo = () => {
-    setEmail('admin@nawabisafar.in');
-    setPassword('lucknow@2026');
+  const handleRecoveryEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryError(null);
+
+    const clean = recoveryEmail.trim().toLowerCase();
+    if (clean !== 'admin@nawabisafar.in') {
+      setRecoveryError('Unrecognized email address. Only the registered administrator email is authorized.');
+      return;
+    }
+
+    setNewPassword('');
+    setConfirmPassword('');
+    setViewMode('forgot_reset');
+  };
+
+  const handlePasswordResetSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryError(null);
+
+    if (newPassword.length < 6) {
+      setRecoveryError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setRecoveryError('Passwords do not match. Please ensure both fields match.');
+      return;
+    }
+
+    const res = AuthService.resetPassword(recoveryEmail, newPassword);
+    if (res.success) {
+      setSuccessMsg('Administrator password has been successfully updated. You can now sign in.');
+      setViewMode('login');
+      setPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setRecoveryEmail('');
+    } else {
+      setRecoveryError(res.error || 'Failed to update administrator password.');
+    }
+  };
+
+  const handleSwitchToForgot = () => {
     setError(null);
+    setSuccessMsg(null);
+    setPassword('');
+    setRecoveryEmail('');
+    setRecoveryError(null);
+    setViewMode('forgot_email');
+  };
+
+  const handleCancelForgot = () => {
+    setRecoveryError(null);
+    setRecoveryEmail('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPassword('');
+    setViewMode('login');
   };
 
   return (
@@ -43,6 +122,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate, onLo
         <button
           onClick={() => onNavigate('/')}
           className="inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-white transition-colors"
+          id="admin-login-back-btn"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to Nawabi Safar</span>
@@ -54,96 +134,233 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate, onLo
             <ShieldCheck className="w-7 h-7" />
           </div>
           <h1 className="text-2xl font-bold font-serif-heading text-white">
-            Curator & Admin Portal
+            {viewMode === 'login' ? 'Curator & Admin Portal' : 'Administrator Recovery'}
           </h1>
           <p className="text-xs text-stone-400">
-            Sign in to manage Lucknow destinations, local artisans, emergency numbers, and platform parameters.
+            {viewMode === 'login'
+              ? 'Sign in to manage Lucknow destinations, local artisans, emergency numbers, and platform parameters.'
+              : 'Demonstration recovery workflow for authorized platform administrator.'}
           </p>
         </div>
 
-        {/* Demo Credentials Helper Pill */}
-        <div className="bg-amber-950/50 border border-amber-800/40 rounded-2xl p-4 text-xs space-y-1.5">
-          <div className="flex items-center justify-between font-bold text-amber-300">
-            <span className="flex items-center gap-1">
-              <Key className="w-3.5 h-3.5" /> Demo Admin Access
-            </span>
-            <button
-              type="button"
-              onClick={handleFillDemo}
-              className="text-[11px] underline hover:text-amber-200"
-            >
-              Autofill
-            </button>
-          </div>
-          <div className="text-stone-300 text-[11px]">
-            Email: <code className="bg-black/40 px-1 py-0.5 rounded text-amber-200">admin@nawabisafar.in</code>
-          </div>
-          <div className="text-stone-300 text-[11px]">
-            Pass: <code className="bg-black/40 px-1 py-0.5 rounded text-amber-200">lucknow@2026</code>
-          </div>
-        </div>
-
-        {error && (
-          <div className="p-3 bg-red-900/40 border border-red-800 rounded-xl text-xs text-red-200">
-            {error}
+        {/* Success message banner */}
+        {successMsg && (
+          <div className="p-3 bg-emerald-950/80 border border-emerald-800 rounded-xl text-xs text-emerald-200 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span>{successMsg}</span>
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
-              Admin Email
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="admin@nawabisafar.in"
-                className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                id="admin-email-input"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                id="admin-password-input"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 mt-2"
-            id="admin-login-submit-btn"
-          >
-            {loading ? (
-              <span>Authenticating...</span>
-            ) : (
-              <>
-                <ShieldCheck className="w-4 h-4" />
-                <span>Sign In to Dashboard</span>
-              </>
+        {/* Standard Login View */}
+        {viewMode === 'login' && (
+          <>
+            {error && (
+              <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-xs text-red-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{error}</span>
+              </div>
             )}
-          </button>
-        </form>
+
+            <form onSubmit={handleLoginSubmit} className="space-y-4" autoComplete="off">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                  Admin Email
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="name@nawabisafar.in"
+                    autoComplete="username"
+                    className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    id="admin-email-input"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSwitchToForgot}
+                    className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                    id="admin-forgot-password-btn"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    id="admin-password-input"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 mt-2 cursor-pointer"
+                id="admin-login-submit-btn"
+              >
+                {loading ? (
+                  <span>Authenticating...</span>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Sign In to Dashboard</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </>
+        )}
+
+        {/* Forgot Password - Step 1: Email Identification */}
+        {viewMode === 'forgot_email' && (
+          <form onSubmit={handleRecoveryEmailSubmit} className="space-y-4" autoComplete="off">
+            {recoveryError && (
+              <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-xs text-red-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{recoveryError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                Registered Admin Email
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  required
+                  value={recoveryEmail}
+                  onChange={e => setRecoveryEmail(e.target.value)}
+                  placeholder="name@nawabisafar.in"
+                  autoComplete="off"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  id="admin-recovery-email-input"
+                />
+              </div>
+              <p className="text-[11px] text-stone-500 mt-1.5 leading-normal">
+                Enter your authorized curator account email to verify administrator privileges.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCancelForgot}
+                className="flex-1 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                id="admin-verify-email-btn"
+              >
+                <span>Verify Email</span>
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Forgot Password - Step 2: Set New Password */}
+        {viewMode === 'forgot_reset' && (
+          <form onSubmit={handlePasswordResetSubmit} className="space-y-4" autoComplete="off">
+            {recoveryError && (
+              <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-xs text-red-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{recoveryError}</span>
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/40 text-xs text-amber-200 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>Identity verified for <strong>{recoveryEmail}</strong></span>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                New Administrator Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Enter new password (min. 6 characters)"
+                  autoComplete="new-password"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  id="admin-new-password-input"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  autoComplete="new-password"
+                  className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  id="admin-confirm-password-input"
+                />
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-stone-950/60 border border-stone-800/80 rounded-xl flex items-start gap-2 text-[11px] text-stone-400">
+              <Info className="w-3.5 h-3.5 shrink-0 text-amber-500 mt-0.5" />
+              <span>
+                Demo mode: Password updates immediately for this session. Production builds utilize backend token verification.
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCancelForgot}
+                className="flex-1 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                id="admin-save-new-password-btn"
+              >
+                <span>Save Password</span>
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
 };
+
+

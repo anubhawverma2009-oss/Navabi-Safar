@@ -3,7 +3,7 @@ import { PlaceVibe, PlaceCategory, ItineraryResult } from '../types';
 import { ItineraryService } from '../services/itineraryService';
 import { 
   Calendar, Clock, IndianRupee, Sparkles, MapPin, CheckCircle2, 
-  Share2, ArrowRight, RotateCcw, Compass, Navigation, Utensils, Landmark 
+  Share2, ArrowRight, RotateCcw, Compass, Navigation, Utensils, Landmark, Star 
 } from 'lucide-react';
 
 interface BuildMyDayPageProps {
@@ -273,9 +273,20 @@ export const BuildMyDayPage: React.FC<BuildMyDayPageProps> = ({ onNavigate }) =>
                       </span>
                     </div>
 
-                    <h3 className="text-lg font-bold text-stone-900 font-serif-heading">
-                      {stop.place.name}
-                    </h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-lg font-bold text-stone-900 font-serif-heading">
+                        {stop.place.name}
+                      </h3>
+                      {stop.place.rating && (
+                        <div className="flex items-center gap-1 bg-amber-100 text-amber-950 font-bold px-2 py-0.5 rounded text-xs">
+                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          <span>{stop.place.rating.toFixed(1)}</span>
+                          {stop.place.reviewCount !== undefined && stop.place.reviewCount > 0 && (
+                            <span className="text-[10px] text-stone-600 font-normal">({stop.place.reviewCount} reviews)</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <p className="text-xs text-amber-900 font-medium">{stop.place.area} • {stop.place.category}</p>
 
                     <p className="text-xs sm:text-sm text-stone-700 mt-2 leading-relaxed">
@@ -294,7 +305,7 @@ export const BuildMyDayPage: React.FC<BuildMyDayPageProps> = ({ onNavigate }) =>
                         onClick={() => onNavigate(`/places/${stop.place.slug}`)}
                         className="text-xs font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1"
                       >
-                        View Place Guide & Photos <ArrowRight className="w-3.5 h-3.5" />
+                        View Destination Details & Visitor Reviews <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Compass, Map, Search, Flame, ShieldAlert, Calendar, Bookmark, Lock, Sparkles } from 'lucide-react';
+import { Menu, Search, Bookmark, Lock } from 'lucide-react';
 import { StorageService } from '../../services/storageService';
 import { AuthService } from '../../services/authService';
+import { useHiddenAdminTrigger } from '../../utils/useHiddenAdminTrigger';
 
 interface NavbarProps {
   currentRoute?: string;
@@ -22,6 +23,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isScrolled, setIsScrolled] = useState(false);
   const [bookmarkCount, setBookmarkCount] = useState(0);
   const isAdmin = AuthService.isAuthenticated();
+
+  const handleAdminTrigger = useHiddenAdminTrigger(() => {
+    onNavigate(isAdmin ? '/admin/dashboard' : '/admin/login');
+  }, 3, 1800);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -47,7 +52,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: 'Map', route: '/map', badge: 'Live' },
     { label: 'Discover Vibes', route: '/vibes' },
     { label: 'Featured', route: '/featured' },
+    { label: 'Local Businesses', route: '/businesses' },
     { label: 'Build My Day', route: '/build-my-day' },
+    { label: 'Reviews', route: '/feedback' },
     { label: 'Emergency', route: '/emergency', highlight: true }
   ];
 
@@ -67,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Mobile 3-line Hamburger Button */}
             <button
               onClick={onOpenMobileMenu}
-              className="p-2.5 rounded-xl bg-stone-800/80 hover:bg-stone-700 text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors lg:hidden"
+              className="p-2.5 rounded-xl bg-stone-800/80 hover:bg-stone-700 text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors lg:hidden cursor-pointer"
               aria-label="Open Navigation Menu"
               id="navbar-hamburger-btn"
             >
@@ -77,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Brand Logo & Name */}
             <button
               onClick={() => onNavigate('/')}
-              className="flex items-center gap-3 text-left group focus:outline-none"
+              className="flex items-center gap-3 text-left group focus:outline-none cursor-pointer"
               id="navbar-brand-logo"
             >
               <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-amber-400 via-amber-600 to-amber-800 p-0.5 shadow-lg group-hover:scale-105 transition-transform flex items-center justify-center">
@@ -109,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={link.route}
                   onClick={() => onNavigate(link.route)}
                   id={`nav-link-${link.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
-                  className={`px-3.5 py-2 rounded-xl text-xs xl:text-sm font-semibold transition-all relative flex items-center gap-1.5 ${
+                  className={`px-3 py-2 rounded-xl text-xs xl:text-sm font-semibold transition-all relative flex items-center gap-1.5 cursor-pointer ${
                     link.highlight
                       ? 'bg-red-950/80 text-red-300 hover:bg-red-900 border border-red-800/60 shadow-sm'
                       : isActive
@@ -133,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Quick Explore / Search Button */}
             <button
               onClick={() => onOpenQuickSearch ? onOpenQuickSearch() : onNavigate('/explore')}
-              className="p-2.5 rounded-xl text-stone-300 hover:text-white hover:bg-stone-800 transition-colors hidden sm:flex items-center gap-1.5 text-xs font-medium"
+              className="p-2.5 rounded-xl text-stone-300 hover:text-white hover:bg-stone-800 transition-colors hidden sm:flex items-center gap-1.5 text-xs font-medium cursor-pointer"
               title="Search Places (Ctrl+K)"
               id="navbar-search-btn"
             >
@@ -144,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Bookmarks Counter */}
             <button
               onClick={() => onNavigate('/explore?filter=saved')}
-              className="relative p-2.5 rounded-xl text-stone-300 hover:text-white hover:bg-stone-800 transition-colors"
+              className="relative p-2.5 rounded-xl text-stone-300 hover:text-white hover:bg-stone-800 transition-colors cursor-pointer"
               title="Saved Places"
               id="navbar-saved-bookmarks-btn"
             >
@@ -158,8 +165,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Admin Portal Button */}
             <button
-              onClick={() => onNavigate(isAdmin ? '/admin/dashboard' : '/admin/login')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border ${
+              onClick={handleAdminTrigger}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm border cursor-pointer ${
                 isAdmin
                   ? 'bg-emerald-800 text-emerald-100 border-emerald-600 hover:bg-emerald-700'
                   : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700 hover:text-white'
