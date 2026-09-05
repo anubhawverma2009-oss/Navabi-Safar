@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Place, LocalBusiness, EmergencyService } from '../types';
+import { Place, LocalBusiness, EmergencyService, PlaceReview, PlatformFeedback, Suggestion, IssueReport } from '../types';
 
 const env = (import.meta as any).env || {};
 let resolvedUrl = (env.VITE_SUPABASE_URL || '').trim();
@@ -242,3 +242,126 @@ export function mapModelEmergencyToDb(item: EmergencyService): any {
     display_order: item.displayOrder
   };
 }
+
+// ------------------------------------------------------------------------------
+// REVIEWS & FEEDBACK MAPPERS
+// ------------------------------------------------------------------------------
+
+export function mapDbReviewToModel(row: any): PlaceReview {
+  return {
+    id: row.id,
+    placeId: row.place_id,
+    placeName: row.place_name || undefined,
+    userName: row.user_name || 'Fellow Explorer',
+    userLocation: row.user_location || 'Visitor',
+    rating: Number(row.rating) || 5,
+    reviewText: row.review_text || '',
+    visitExperience: row.visit_experience || 'Solo Explorer',
+    visitedDate: row.visited_date || new Date().toISOString().split('T')[0],
+    status: row.status || 'published',
+    helpfulVotes: Number(row.helpful_votes) || 0,
+    createdAt: row.created_at || new Date().toISOString()
+  };
+}
+
+export function mapModelReviewToDb(review: PlaceReview): any {
+  return {
+    id: review.id,
+    place_id: review.placeId,
+    place_name: review.placeName || null,
+    user_name: review.userName,
+    user_location: review.userLocation || null,
+    rating: review.rating,
+    review_text: review.reviewText,
+    visit_experience: review.visitExperience || 'Solo Explorer',
+    visited_date: review.visitedDate || new Date().toISOString().split('T')[0],
+    status: review.status,
+    helpful_votes: review.helpfulVotes || 0,
+    created_at: review.createdAt || new Date().toISOString()
+  };
+}
+
+export function mapDbFeedbackToModel(row: any): PlatformFeedback {
+  return {
+    id: row.id,
+    category: row.category,
+    rating: Number(row.rating) || 5,
+    message: row.message || '',
+    userName: row.user_name || 'Anonymous Explorer',
+    email: row.email || undefined,
+    status: row.status || 'pending',
+    createdAt: row.created_at || new Date().toISOString()
+  };
+}
+
+export function mapModelFeedbackToDb(fb: PlatformFeedback): any {
+  return {
+    id: fb.id,
+    category: fb.category,
+    rating: fb.rating,
+    message: fb.message,
+    user_name: fb.userName || null,
+    email: fb.email || null,
+    status: fb.status,
+    created_at: fb.createdAt || new Date().toISOString()
+  };
+}
+
+export function mapDbSuggestionToModel(row: any): Suggestion {
+  return {
+    id: row.id,
+    category: row.category,
+    title: row.title,
+    description: row.description,
+    locationArea: row.location_area || undefined,
+    suggestedBy: row.suggested_by || 'Curious Traveller',
+    contactEmail: row.contact_email || undefined,
+    status: row.status || 'pending',
+    createdAt: row.created_at || new Date().toISOString()
+  };
+}
+
+export function mapModelSuggestionToDb(sug: Suggestion): any {
+  return {
+    id: sug.id,
+    category: sug.category,
+    title: sug.title,
+    description: sug.description,
+    location_area: sug.locationArea || null,
+    suggested_by: sug.suggestedBy || null,
+    contact_email: sug.contactEmail || null,
+    status: sug.status,
+    created_at: sug.createdAt || new Date().toISOString()
+  };
+}
+
+export function mapDbIssueToModel(row: any): IssueReport {
+  return {
+    id: row.id,
+    placeId: row.place_id || undefined,
+    placeName: row.place_name || undefined,
+    issueType: row.issue_type,
+    description: row.description,
+    reportedBy: row.reported_by || 'Concerned Visitor',
+    contactEmail: row.contact_email || undefined,
+    status: row.status || 'pending',
+    adminNotes: row.admin_notes || undefined,
+    createdAt: row.created_at || new Date().toISOString()
+  };
+}
+
+export function mapModelIssueToDb(issue: IssueReport): any {
+  return {
+    id: issue.id,
+    place_id: issue.placeId || null,
+    place_name: issue.placeName || null,
+    issue_type: issue.issueType,
+    description: issue.description,
+    reported_by: issue.reportedBy || null,
+    contact_email: issue.contactEmail || null,
+    status: issue.status,
+    admin_notes: issue.adminNotes || null,
+    created_at: issue.createdAt || new Date().toISOString()
+  };
+}
+

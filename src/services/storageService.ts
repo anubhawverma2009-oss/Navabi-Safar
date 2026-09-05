@@ -6,9 +6,9 @@ import {
   mapDbPlaceToModel, 
   mapModelPlaceToDb, 
   mapDbBusinessToModel, 
-  mapModelBusinessToDb,
-  mapDbEmergencyToModel,
-  mapModelEmergencyToDb
+  mapModelBusinessToDb, 
+  mapDbEmergencyToModel, 
+  mapModelEmergencyToDb 
 } from '../lib/supabaseClient';
 
 const STORAGE_KEYS = {
@@ -40,11 +40,11 @@ let cachedPlaces: Place[] | null = null;
 let cachedBusinesses: LocalBusiness[] | null = null;
 let cachedEmergency: EmergencyService[] | null = null;
 let isSyncingWithRemote = false;
-let remoteSyncAttempted = false;
+let realtimeSubscribed = false;
 
 export const StorageService = {
   /**
-   * Subscribe to storage updates (useful when remote Supabase data is fetched)
+   * Subscribe to storage updates (realtime remote events or local cache updates)
    */
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
@@ -54,9 +54,13 @@ export const StorageService = {
   },
 
   /**
-   * Initial data setup (Hydrates local fallback and triggers background remote sync)
+   * Initial data setup:
+   * - Hydrates local cache as immediate offline fallback.
+   * - Immediately queries Supabase PostgreSQL as authoritative source of truth.
+   * - Attaches Supabase Realtime channel and reconnect event listeners.
    */
   initSeedData(): void {
+    // 1. Ensure local fallback structure exists
     if (!localStorage.getItem(STORAGE_KEYS.PLACES)) {
       localStorage.setItem(STORAGE_KEYS.PLACES, JSON.stringify(INITIAL_PLACES));
     }
@@ -73,16 +77,150 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEYS.EMERGENCY, JSON.stringify(INITIAL_EMERGENCY_SERVICES));
     }
 
-    // Auto-sync with Supabase in background if configured
-    if (isSupabaseConfigured() && !remoteSyncAttempted) {
+    // 2. Fetch authoritative data from Supabase immediately
+    if (isSupabaseConfigured()) {
       this.syncFromRemote().catch(err => {
-        console.warn('Initial remote sync warning:', err);
+        console.warn('Initial Supabase fetch warning:', err);
       });
+      this.initRealtime();
+      this.initWindowListeners();
     }
   },
 
   /**
-   * Synchronizes data from Supabase into local runtime cache and localStorage
+   * Sets up window focus and online listeners for fresh-data reconciliation
+   */
+  initWindowListeners(): void {
+    if (typeof window === 'undefined') return;
+    
+    window.addEventListener('focus', () => {
+      this.syncFromRemote().catch(() => {});
+    });
+
+    window.addEventListener('online', () => {
+      this.syncFromRemote().catch(() => {});
+    });
+  },
+
+  /**
+   * Sets up Supabase Realtime subscription on places, businesses, and emergency tables
+   */
+  initRealtime(): void {
+    if (realtimeSubscribed) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    try {
+      const channel = supabase.channel('nawabi_safar_public_data')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'places' }, (payload) => {
+          this.handlePlaceRealtimeEvent(payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'local_businesses' }, (payload) => {
+          this.handleBusinessRealtimeEvent(payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_services' }, (payload) => {
+          this.handleEmergencyRealtimeEvent(payload);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            realtimeSubscribed = true;
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            realtimeSubscribed = false;
+          }
+        });
+    } catch (err) {
+      console.warn('Supabase Realtime subscription exception:', err);
+    }
+  },
+
+  handlePlaceRealtimeEvent(payload: any): void {
+    const list = this.getPlaces().slice();
+    const eventType = payload.eventType;
+
+    if (eventType === 'INSERT') {
+      const newPlace = mapDbPlaceToModel(payload.new);
+      const exists = list.some(p => p.id === newPlace.id);
+      if (!exists) {
+        list.unshift(newPlace);
+        this.savePlacesLocal(list);
+      }
+    } else if (eventType === 'UPDATE') {
+      const updatedPlace = mapDbPlaceToModel(payload.new);
+      const idx = list.findIndex(p => p.id === updatedPlace.id);
+      if (idx >= 0) {
+        list[idx] = updatedPlace;
+      } else {
+        list.unshift(updatedPlace);
+      }
+      this.savePlacesLocal(list);
+    } else if (eventType === 'DELETE') {
+      const oldId = payload.old?.id;
+      if (oldId) {
+        const filtered = list.filter(p => p.id !== oldId);
+        this.savePlacesLocal(filtered);
+      }
+    }
+  },
+
+  handleBusinessRealtimeEvent(payload: any): void {
+    const list = this.getBusinesses().slice();
+    const eventType = payload.eventType;
+
+    if (eventType === 'INSERT') {
+      const newBiz = mapDbBusinessToModel(payload.new);
+      if (!list.some(b => b.id === newBiz.id)) {
+        list.unshift(newBiz);
+        this.saveBusinessesLocal(list);
+      }
+    } else if (eventType === 'UPDATE') {
+      const updatedBiz = mapDbBusinessToModel(payload.new);
+      const idx = list.findIndex(b => b.id === updatedBiz.id);
+      if (idx >= 0) {
+        list[idx] = updatedBiz;
+      } else {
+        list.unshift(updatedBiz);
+      }
+      this.saveBusinessesLocal(list);
+    } else if (eventType === 'DELETE') {
+      const oldId = payload.old?.id;
+      if (oldId) {
+        const filtered = list.filter(b => b.id !== oldId);
+        this.saveBusinessesLocal(filtered);
+      }
+    }
+  },
+
+  handleEmergencyRealtimeEvent(payload: any): void {
+    const list = this.getEmergencyServices().slice();
+    const eventType = payload.eventType;
+
+    if (eventType === 'INSERT') {
+      const newService = mapDbEmergencyToModel(payload.new);
+      if (!list.some(s => s.id === newService.id)) {
+        list.unshift(newService);
+        this.saveEmergencyServicesLocal(list);
+      }
+    } else if (eventType === 'UPDATE') {
+      const updatedService = mapDbEmergencyToModel(payload.new);
+      const idx = list.findIndex(s => s.id === updatedService.id);
+      if (idx >= 0) {
+        list[idx] = updatedService;
+      } else {
+        list.unshift(updatedService);
+      }
+      this.saveEmergencyServicesLocal(list);
+    } else if (eventType === 'DELETE') {
+      const oldId = payload.old?.id;
+      if (oldId) {
+        const filtered = list.filter(s => s.id !== oldId);
+        this.saveEmergencyServicesLocal(filtered);
+      }
+    }
+  },
+
+  /**
+   * Synchronizes data from Supabase into local runtime cache and localStorage.
+   * Supabase PostgreSQL is the authoritative master.
    */
   async syncFromRemote(): Promise<{ success: boolean; placeCount: number; error?: string }> {
     const supabase = getSupabase();
@@ -90,7 +228,6 @@ export const StorageService = {
       return { success: false, placeCount: 0, error: 'Supabase unconfigured' };
     }
 
-    remoteSyncAttempted = true;
     isSyncingWithRemote = true;
 
     try {
@@ -140,24 +277,24 @@ export const StorageService = {
       };
     } catch (e: any) {
       isSyncingWithRemote = false;
-      console.warn('Supabase remote sync failed, using local cache:', e.message || e);
+      console.warn('Supabase remote fetch notice (using cache):', e.message || e);
       return { 
         success: false, 
-        placeCount: 0, 
-        error: e.message || 'Remote sync failed' 
+        placeCount: cachedPlaces ? cachedPlaces.length : 0, 
+        error: e.message || 'Remote fetch failed' 
       };
     }
   },
 
   /**
-   * One-click tool: Seeds/Migrates initial tourism data to Supabase PostgreSQL without duplicates
+   * Safe manual sync tool for Admin: syncs initial dataset to Supabase PostgreSQL without overwriting on conflicts
    */
   async syncSeedToSupabase(): Promise<{ success: boolean; message: string; count: number }> {
     const supabase = getSupabase();
     if (!supabase) {
       return {
         success: false,
-        message: 'Cannot seed: Supabase is not configured in .env variables.',
+        message: 'Cannot sync: Supabase is not configured in environment variables.',
         count: 0
       };
     }
@@ -184,13 +321,13 @@ export const StorageService = {
 
       return {
         success: true,
-        message: `Successfully synchronized ${placesToSeed.length} places, ${businessesToSeed.length} businesses, and ${emergencyToSeed.length} emergency contacts to Supabase PostgreSQL.`,
+        message: `Successfully synchronized ${placesToSeed.length} destinations, ${businessesToSeed.length} local businesses, and ${emergencyToSeed.length} emergency contacts with Supabase PostgreSQL!`,
         count: placesToSeed.length
       };
     } catch (e: any) {
       return {
         success: false,
-        message: `Migration error: ${e.message || 'Unknown error during Supabase upsert'}`,
+        message: `Database sync error: ${e.message || 'Unknown error during Supabase sync'}`,
         count: 0
       };
     }
@@ -218,59 +355,83 @@ export const StorageService = {
     }
   },
 
-  savePlaces(places: Place[]): void {
+  savePlacesLocal(places: Place[]): void {
     cachedPlaces = places;
     try {
       localStorage.setItem(STORAGE_KEYS.PLACES, JSON.stringify(places));
     } catch (e) {
-      console.error('Failed to save places to local storage', e);
+      console.error('Failed to save places to cache', e);
     }
     notifyListeners();
   },
 
-  async savePlaceRemote(place: Place): Promise<{ success: boolean; error?: string }> {
-    // 1. Update local cache immediately
-    const list = this.getPlaces();
-    const idx = list.findIndex(p => p.id === place.id);
-    if (idx >= 0) {
-      list[idx] = place;
-    } else {
-      list.unshift(place);
-    }
-    this.savePlaces(list);
+  savePlaces(places: Place[]): void {
+    this.savePlacesLocal(places);
+  },
 
-    // 2. Persist to Supabase if available
+  /**
+   * Authoritative Place Persistence:
+   * Writes directly to Supabase PostgreSQL.
+   * Local cache is updated ONLY after the database confirms the write.
+   */
+  async savePlaceRemote(place: Place): Promise<{ success: boolean; error?: string; place?: Place }> {
     const supabase = getSupabase();
     if (!supabase) {
-      return { success: true }; // Local persistence succeeded
+      // Local fallback only if Supabase is completely unconfigured
+      const list = this.getPlaces().slice();
+      const idx = list.findIndex(p => p.id === place.id);
+      if (idx >= 0) list[idx] = place;
+      else list.unshift(place);
+      this.savePlacesLocal(list);
+      return { success: true, place };
     }
 
     try {
       const dbPayload = mapModelPlaceToDb(place);
-      const { error } = await supabase
+      dbPayload.updated_at = new Date().toISOString();
+
+      const { data, error } = await supabase
         .from('places')
-        .upsert(dbPayload, { onConflict: 'id' });
+        .upsert(dbPayload, { onConflict: 'id' })
+        .select()
+        .single();
 
       if (error) {
-        console.warn('Supabase remote write error (using local cache):', error.message);
-        return { success: false, error: error.message };
+        console.error('Supabase place upsert rejected by database:', error);
+        return { 
+          success: false, 
+          error: `Database write rejected (${error.code || 'RLS'}): ${error.message}. Ensure you are signed in with an active curator account.` 
+        };
       }
-      return { success: true };
+
+      const persistedModel = data ? mapDbPlaceToModel(data) : place;
+
+      // Update local cache only upon successful database commit
+      const list = this.getPlaces().slice();
+      const idx = list.findIndex(p => p.id === persistedModel.id);
+      if (idx >= 0) {
+        list[idx] = persistedModel;
+      } else {
+        list.unshift(persistedModel);
+      }
+      this.savePlacesLocal(list);
+
+      return { success: true, place: persistedModel };
     } catch (e: any) {
-      console.warn('Supabase write exception:', e);
-      return { success: false, error: e.message };
+      console.error('Supabase write exception:', e);
+      return { success: false, error: e.message || 'Network exception during place update' };
     }
   },
 
+  /**
+   * Authoritative Place Deletion:
+   * Deletes directly from Supabase PostgreSQL.
+   */
   async deletePlaceRemote(id: string): Promise<{ success: boolean; error?: string }> {
-    // 1. Remove from local cache
-    const list = this.getPlaces();
-    const filtered = list.filter(p => p.id !== id);
-    this.savePlaces(filtered);
-
-    // 2. Delete from Supabase if available
     const supabase = getSupabase();
     if (!supabase) {
+      const list = this.getPlaces().filter(p => p.id !== id);
+      this.savePlacesLocal(list);
       return { success: true };
     }
 
@@ -281,12 +442,18 @@ export const StorageService = {
         .eq('id', id);
 
       if (error) {
-        console.warn('Supabase delete error:', error.message);
-        return { success: false, error: error.message };
+        console.error('Supabase place delete rejected by database:', error);
+        return { 
+          success: false, 
+          error: `Database delete rejected (${error.code || 'RLS'}): ${error.message}` 
+        };
       }
+
+      const list = this.getPlaces().filter(p => p.id !== id);
+      this.savePlacesLocal(list);
       return { success: true };
     } catch (e: any) {
-      return { success: false, error: e.message };
+      return { success: false, error: e.message || 'Network exception during place delete' };
     }
   },
 
@@ -358,20 +525,27 @@ export const StorageService = {
     }
   },
 
-  saveBusinesses(businesses: LocalBusiness[]): void {
+  saveBusinessesLocal(businesses: LocalBusiness[]): void {
     cachedBusinesses = businesses;
     try {
       localStorage.setItem(STORAGE_KEYS.BUSINESSES, JSON.stringify(businesses));
-      notifyListeners();
     } catch (e) {
       console.error('Failed to save businesses', e);
     }
+    notifyListeners();
   },
 
-  async addBusiness(biz: Partial<LocalBusiness>): Promise<LocalBusiness> {
-    const list = this.getBusinesses();
+  saveBusinesses(businesses: LocalBusiness[]): void {
+    this.saveBusinessesLocal(businesses);
+  },
+
+  /**
+   * Authoritative Business Creation:
+   * Writes to Supabase first; commits to local state on success.
+   */
+  async addBusiness(biz: Partial<LocalBusiness>): Promise<{ success: boolean; business?: LocalBusiness; error?: string }> {
     const newBiz: LocalBusiness = {
-      id: 'biz_' + Date.now(),
+      id: biz.id || ('biz_' + Date.now()),
       name: biz.name || 'Artisan Boutique',
       category: biz.category || 'attire',
       specialty: biz.specialty || '',
@@ -385,57 +559,95 @@ export const StorageService = {
       status: biz.status || 'published',
       createdAt: new Date().toISOString()
     };
-    list.unshift(newBiz);
-    this.saveBusinesses(list);
 
-    // Sync to Supabase in background
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('local_businesses').insert(mapModelBusinessToDb(newBiz)).then(
-        ({ error }) => { if (error) console.warn('Supabase business insert notice:', error.message); },
-        (err) => console.warn('Supabase network error:', err)
-      );
+      try {
+        const dbPayload = mapModelBusinessToDb(newBiz);
+        const { data, error } = await supabase
+          .from('local_businesses')
+          .insert(dbPayload)
+          .select()
+          .single();
+
+        if (error) {
+          return { success: false, error: `Supabase business insert failed: ${error.message}` };
+        }
+        const created = data ? mapDbBusinessToModel(data) : newBiz;
+        const list = this.getBusinesses().slice();
+        list.unshift(created);
+        this.saveBusinessesLocal(list);
+        return { success: true, business: created };
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Business insert exception' };
+      }
     }
 
-    return newBiz;
+    const list = this.getBusinesses().slice();
+    list.unshift(newBiz);
+    this.saveBusinessesLocal(list);
+    return { success: true, business: newBiz };
   },
 
-  async updateBusiness(id: string, updates: Partial<LocalBusiness>): Promise<boolean> {
-    const list = this.getBusinesses();
+  /**
+   * Authoritative Business Update:
+   * Updates Supabase first; commits to local state on success.
+   */
+  async updateBusiness(id: string, updates: Partial<LocalBusiness>): Promise<{ success: boolean; error?: string }> {
+    const list = this.getBusinesses().slice();
     const idx = list.findIndex(b => b.id === id);
-    if (idx >= 0) {
-      const updated = { ...list[idx], ...updates };
-      list[idx] = updated;
-      this.saveBusinesses(list);
-
-      const supabase = getSupabase();
-      if (supabase) {
-        supabase.from('local_businesses').upsert(mapModelBusinessToDb(updated)).then(
-          ({ error }) => { if (error) console.warn('Supabase business update notice:', error.message); },
-          (err) => console.warn('Supabase network error:', err)
-        );
-      }
-      return true;
+    if (idx < 0) {
+      return { success: false, error: 'Business not found' };
     }
-    return false;
+
+    const updated: LocalBusiness = { ...list[idx], ...updates };
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const dbPayload = mapModelBusinessToDb(updated);
+        dbPayload.updated_at = new Date().toISOString();
+        const { error } = await supabase
+          .from('local_businesses')
+          .upsert(dbPayload, { onConflict: 'id' });
+
+        if (error) {
+          return { success: false, error: `Supabase business update failed: ${error.message}` };
+        }
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Business update exception' };
+      }
+    }
+
+    list[idx] = updated;
+    this.saveBusinessesLocal(list);
+    return { success: true };
   },
 
-  async deleteBusiness(id: string): Promise<boolean> {
-    const list = this.getBusinesses();
-    const filtered = list.filter(b => b.id !== id);
-    if (filtered.length !== list.length) {
-      this.saveBusinesses(filtered);
+  /**
+   * Authoritative Business Delete:
+   * Deletes from Supabase first.
+   */
+  async deleteBusiness(id: string): Promise<{ success: boolean; error?: string }> {
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('local_businesses')
+          .delete()
+          .eq('id', id);
 
-      const supabase = getSupabase();
-      if (supabase) {
-        supabase.from('local_businesses').delete().eq('id', id).then(
-          ({ error }) => { if (error) console.warn('Supabase business delete notice:', error.message); },
-          (err) => console.warn('Supabase network error:', err)
-        );
+        if (error) {
+          return { success: false, error: `Supabase business delete failed: ${error.message}` };
+        }
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Business delete exception' };
       }
-      return true;
     }
-    return false;
+
+    const list = this.getBusinesses().filter(b => b.id !== id);
+    this.saveBusinessesLocal(list);
+    return { success: true };
   },
 
   // ----------------------------------------------------------------------------
@@ -458,20 +670,28 @@ export const StorageService = {
     }
   },
 
-  saveEmergencyServices(services: EmergencyService[]): void {
+  saveEmergencyServicesLocal(services: EmergencyService[]): void {
     cachedEmergency = services;
     try {
       localStorage.setItem(STORAGE_KEYS.EMERGENCY, JSON.stringify(services));
-      notifyListeners();
     } catch (e) {
       console.error('Failed to save emergency services', e);
     }
+    notifyListeners();
   },
 
-  async addEmergencyService(service: Partial<EmergencyService>): Promise<EmergencyService> {
-    const list = this.getEmergencyServices();
+  saveEmergencyServices(services: EmergencyService[]): void {
+    this.saveEmergencyServicesLocal(services);
+  },
+
+  /**
+   * Authoritative Emergency Service Creation:
+   * Writes to Supabase first.
+   */
+  async addEmergencyService(service: Partial<EmergencyService>): Promise<{ success: boolean; service?: EmergencyService; error?: string }> {
+    const list = this.getEmergencyServices().slice();
     const newService: EmergencyService = {
-      id: 'emerg_' + Date.now(),
+      id: service.id || ('emerg_' + Date.now()),
       serviceName: service.serviceName || 'Emergency Support',
       category: service.category || 'police',
       number: service.number || '112',
@@ -482,56 +702,93 @@ export const StorageService = {
       displayOrder: service.displayOrder || (list.length + 1),
       enabled: service.enabled ?? true
     };
-    list.unshift(newService);
-    this.saveEmergencyServices(list);
 
     const supabase = getSupabase();
     if (supabase) {
-      supabase.from('emergency_services').insert(mapModelEmergencyToDb(newService)).then(
-        ({ error }) => { if (error) console.warn('Supabase emergency insert notice:', error.message); },
-        (err) => console.warn('Supabase network error:', err)
-      );
+      try {
+        const dbPayload = mapModelEmergencyToDb(newService);
+        const { data, error } = await supabase
+          .from('emergency_services')
+          .insert(dbPayload)
+          .select()
+          .single();
+
+        if (error) {
+          return { success: false, error: `Supabase emergency insert failed: ${error.message}` };
+        }
+        const created = data ? mapDbEmergencyToModel(data) : newService;
+        list.unshift(created);
+        this.saveEmergencyServicesLocal(list);
+        return { success: true, service: created };
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Emergency insert exception' };
+      }
     }
 
-    return newService;
+    list.unshift(newService);
+    this.saveEmergencyServicesLocal(list);
+    return { success: true, service: newService };
   },
 
-  async updateEmergencyService(id: string, updates: Partial<EmergencyService>): Promise<boolean> {
-    const list = this.getEmergencyServices();
+  /**
+   * Authoritative Emergency Service Update:
+   * Updates Supabase first.
+   */
+  async updateEmergencyService(id: string, updates: Partial<EmergencyService>): Promise<{ success: boolean; error?: string }> {
+    const list = this.getEmergencyServices().slice();
     const idx = list.findIndex(s => s.id === id);
-    if (idx >= 0) {
-      const updated = { ...list[idx], ...updates };
-      list[idx] = updated;
-      this.saveEmergencyServices(list);
-
-      const supabase = getSupabase();
-      if (supabase) {
-        supabase.from('emergency_services').upsert(mapModelEmergencyToDb(updated)).then(
-          ({ error }) => { if (error) console.warn('Supabase emergency update notice:', error.message); },
-          (err) => console.warn('Supabase network error:', err)
-        );
-      }
-      return true;
+    if (idx < 0) {
+      return { success: false, error: 'Emergency record not found' };
     }
-    return false;
+
+    const updated: EmergencyService = { ...list[idx], ...updates };
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const dbPayload = mapModelEmergencyToDb(updated);
+        dbPayload.updated_at = new Date().toISOString();
+        const { error } = await supabase
+          .from('emergency_services')
+          .upsert(dbPayload, { onConflict: 'id' });
+
+        if (error) {
+          return { success: false, error: `Supabase emergency update failed: ${error.message}` };
+        }
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Emergency update exception' };
+      }
+    }
+
+    list[idx] = updated;
+    this.saveEmergencyServicesLocal(list);
+    return { success: true };
   },
 
-  async deleteEmergencyService(id: string): Promise<boolean> {
-    const list = this.getEmergencyServices();
-    const filtered = list.filter(s => s.id !== id);
-    if (filtered.length !== list.length) {
-      this.saveEmergencyServices(filtered);
+  /**
+   * Authoritative Emergency Service Deletion:
+   * Deletes from Supabase first.
+   */
+  async deleteEmergencyService(id: string): Promise<{ success: boolean; error?: string }> {
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('emergency_services')
+          .delete()
+          .eq('id', id);
 
-      const supabase = getSupabase();
-      if (supabase) {
-        supabase.from('emergency_services').delete().eq('id', id).then(
-          ({ error }) => { if (error) console.warn('Supabase emergency delete notice:', error.message); },
-          (err) => console.warn('Supabase network error:', err)
-        );
+        if (error) {
+          return { success: false, error: `Supabase emergency delete failed: ${error.message}` };
+        }
+      } catch (e: any) {
+        return { success: false, error: e.message || 'Emergency delete exception' };
       }
-      return true;
     }
-    return false;
+
+    const list = this.getEmergencyServices().filter(s => s.id !== id);
+    this.saveEmergencyServicesLocal(list);
+    return { success: true };
   },
 
   // ----------------------------------------------------------------------------
@@ -619,7 +876,7 @@ export const StorageService = {
 
   exportFullDatabase(): string {
     const exportObject = {
-      version: '2.0-cloud-sync',
+      version: '3.0-database-first',
       exportedAt: new Date().toISOString(),
       places: this.getPlaces(),
       categories: this.getCategories(),
@@ -634,7 +891,7 @@ export const StorageService = {
     try {
       const parsed = JSON.parse(jsonString);
       if (Array.isArray(parsed.places)) {
-        this.savePlaces(parsed.places);
+        this.savePlacesLocal(parsed.places);
       }
       if (Array.isArray(parsed.categories)) {
         this.saveCategories(parsed.categories);
@@ -643,10 +900,10 @@ export const StorageService = {
         this.saveVibes(parsed.vibes);
       }
       if (Array.isArray(parsed.businesses)) {
-        this.saveBusinesses(parsed.businesses);
+        this.saveBusinessesLocal(parsed.businesses);
       }
       if (Array.isArray(parsed.emergencyServices)) {
-        this.saveEmergencyServices(parsed.emergencyServices);
+        this.saveEmergencyServicesLocal(parsed.emergencyServices);
       }
       return true;
     } catch (e) {
@@ -655,4 +912,3 @@ export const StorageService = {
     }
   }
 };
-

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthService } from '../../services/authService';
+import { getSupabase } from '../../lib/supabaseClient';
 import { ShieldCheck, Lock, Mail, ArrowLeft, KeyRound, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 interface AdminLoginPageProps {
@@ -55,22 +56,38 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate, onLo
     }
   };
 
-  const handleRecoveryEmailSubmit = (e: React.FormEvent) => {
+  const handleRecoveryEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRecoveryError(null);
 
     const clean = recoveryEmail.trim().toLowerCase();
-    if (clean !== 'admin@nawabisafar.in') {
-      setRecoveryError('Unrecognized email address. Only the registered administrator email is authorized.');
+    if (!clean.includes('@')) {
+      setRecoveryError('Please provide a valid email address.');
       return;
     }
 
-    setNewPassword('');
-    setConfirmPassword('');
-    setViewMode('forgot_reset');
+    const supabase = getSupabase();
+    if (!supabase) {
+      setRecoveryError('Supabase is not configured.');
+      return;
+    }
+
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(clean);
+      if (resetErr) {
+        setRecoveryError(`Reset error: ${resetErr.message}`);
+        return;
+      }
+
+      setSuccessMsg(`Password reset instructions sent to ${clean}. Check your inbox or run supabase_admin_provision.sql in Supabase SQL Editor.`);
+      setViewMode('login');
+      setRecoveryEmail('');
+    } catch (err: any) {
+      setRecoveryError(err.message || 'Failed to send password reset request.');
+    }
   };
 
-  const handlePasswordResetSubmit = (e: React.FormEvent) => {
+  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRecoveryError(null);
 
@@ -84,17 +101,26 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigate, onLo
       return;
     }
 
-    const res = AuthService.resetPassword(recoveryEmail, newPassword);
-    if (res.success) {
-      setSuccessMsg('Administrator password has been successfully updated. You can now sign in.');
-      setViewMode('login');
-      setPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setRecoveryEmail('');
-    } else {
-      setRecoveryError(res.error || 'Failed to update administrator password.');
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
+        if (updateErr) {
+          setRecoveryError(`Update failed: ${updateErr.message}`);
+          return;
+        }
+      } catch (err: any) {
+        setRecoveryError(err.message || 'Failed to update password.');
+        return;
+      }
     }
+
+    setSuccessMsg('Administrator password has been successfully updated. You can now sign in.');
+    setViewMode('login');
+    setPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setRecoveryEmail('');
   };
 
   const handleSwitchToForgot = () => {

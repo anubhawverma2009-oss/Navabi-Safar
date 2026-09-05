@@ -234,7 +234,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     setIsEditingPlace(true);
   };
 
-  const handleSavePlace = (e: React.FormEvent) => {
+  const handleSavePlace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!placeFormData.name || !placeFormData.description) {
       showNotification('Place Name and Description are required', 'error');
@@ -261,36 +261,51 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       whyVisit: whyVisits
     };
 
-    if (editingPlaceId) {
-      PlaceService.updatePlace(editingPlaceId, payload);
-      showNotification(`Updated "${payload.name}" successfully!`);
-    } else {
-      PlaceService.createPlace(payload as any);
-      showNotification(`Created new destination "${payload.name}"!`);
-    }
-
-    setIsEditingPlace(false);
-    loadData();
-  };
-
-  const handleDeletePlace = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to permanently delete "${name}"?`)) {
-      PlaceService.deletePlace(id);
-      showNotification(`Deleted "${name}"`);
+    try {
+      if (editingPlaceId) {
+        await PlaceService.updatePlace(editingPlaceId, payload);
+        showNotification(`Updated "${payload.name}" in database successfully!`);
+      } else {
+        await PlaceService.createPlace(payload as any);
+        showNotification(`Created new destination "${payload.name}" in database!`);
+      }
+      setIsEditingPlace(false);
       loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Database write failed. Check your admin permissions.', 'error');
     }
   };
 
-  const handleToggleFeatured = (place: Place) => {
-    PlaceService.updatePlace(place.id, { featured: !place.featured });
-    showNotification(`Toggled featured status for ${place.name}`);
-    loadData();
+  const handleDeletePlace = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to permanently delete "${name}" from the database?`)) {
+      try {
+        await PlaceService.deletePlace(id);
+        showNotification(`Deleted "${name}" from database.`);
+        loadData();
+      } catch (err: any) {
+        showNotification(err.message || 'Database deletion failed', 'error');
+      }
+    }
   };
 
-  const handleToggleHiddenGem = (place: Place) => {
-    PlaceService.updatePlace(place.id, { hiddenGem: !place.hiddenGem });
-    showNotification(`Toggled hidden gem status for ${place.name}`);
-    loadData();
+  const handleToggleFeatured = async (place: Place) => {
+    try {
+      await PlaceService.updatePlace(place.id, { featured: !place.featured });
+      showNotification(`Toggled featured status for ${place.name}`);
+      loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to update featured status', 'error');
+    }
+  };
+
+  const handleToggleHiddenGem = async (place: Place) => {
+    try {
+      await PlaceService.updatePlace(place.id, { hiddenGem: !place.hiddenGem });
+      showNotification(`Toggled hidden gem status for ${place.name}`);
+      loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to update hidden gem status', 'error');
+    }
   };
 
   // -------------------------------------------------------------
@@ -313,26 +328,37 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     setIsEditingBusiness(true);
   };
 
-  const handleSaveBusiness = (e: React.FormEvent) => {
+  const handleSaveBusiness = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessFormData.name) return;
 
-    if (editingBusinessId) {
-      StorageService.updateBusiness(editingBusinessId, businessFormData);
-      showNotification('Updated local business successfully');
-    } else {
-      StorageService.addBusiness(businessFormData as any);
-      showNotification('Added new local business successfully');
+    try {
+      if (editingBusinessId) {
+        const res = await StorageService.updateBusiness(editingBusinessId, businessFormData);
+        if (!res.success) throw new Error(res.error || 'Failed to update business');
+        showNotification('Updated local business in database successfully');
+      } else {
+        const res = await StorageService.addBusiness(businessFormData as any);
+        if (!res.success) throw new Error(res.error || 'Failed to add business');
+        showNotification('Added new local business to database successfully');
+      }
+      setIsEditingBusiness(false);
+      loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to save business', 'error');
     }
-    setIsEditingBusiness(false);
-    loadData();
   };
 
-  const handleDeleteBusiness = (id: string) => {
-    if (window.confirm('Delete this local business record?')) {
-      StorageService.deleteBusiness(id);
-      showNotification('Deleted business');
-      loadData();
+  const handleDeleteBusiness = async (id: string) => {
+    if (window.confirm('Delete this local business record from database?')) {
+      try {
+        const res = await StorageService.deleteBusiness(id);
+        if (!res.success) throw new Error(res.error || 'Failed to delete business');
+        showNotification('Deleted business from database');
+        loadData();
+      } catch (err: any) {
+        showNotification(err.message || 'Failed to delete business', 'error');
+      }
     }
   };
 
@@ -354,26 +380,37 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     setIsEditingEmergency(true);
   };
 
-  const handleSaveEmergency = (e: React.FormEvent) => {
+  const handleSaveEmergency = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emergencyFormData.serviceName || !emergencyFormData.number) return;
 
-    if (editingEmergencyId) {
-      StorageService.updateEmergencyService(editingEmergencyId, emergencyFormData);
-      showNotification('Updated emergency helpline record');
-    } else {
-      StorageService.addEmergencyService(emergencyFormData as any);
-      showNotification('Added emergency helpline');
+    try {
+      if (editingEmergencyId) {
+        const res = await StorageService.updateEmergencyService(editingEmergencyId, emergencyFormData);
+        if (!res.success) throw new Error(res.error || 'Failed to update emergency helpline');
+        showNotification('Updated emergency helpline record in database');
+      } else {
+        const res = await StorageService.addEmergencyService(emergencyFormData as any);
+        if (!res.success) throw new Error(res.error || 'Failed to add emergency helpline');
+        showNotification('Added emergency helpline to database');
+      }
+      setIsEditingEmergency(false);
+      loadData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to save helpline', 'error');
     }
-    setIsEditingEmergency(false);
-    loadData();
   };
 
-  const handleDeleteEmergency = (id: string) => {
-    if (window.confirm('Delete this helpline service?')) {
-      StorageService.deleteEmergencyService(id);
-      showNotification('Deleted helpline');
-      loadData();
+  const handleDeleteEmergency = async (id: string) => {
+    if (window.confirm('Delete this helpline service from database?')) {
+      try {
+        const res = await StorageService.deleteEmergencyService(id);
+        if (!res.success) throw new Error(res.error || 'Failed to delete helpline');
+        showNotification('Deleted helpline from database');
+        loadData();
+      } catch (err: any) {
+        showNotification(err.message || 'Failed to delete helpline', 'error');
+      }
     }
   };
 
@@ -416,7 +453,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
     reader.readAsText(file);
   };
 
-  const handlePasswordChangeSubmit = (e: React.FormEvent) => {
+  const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
 
@@ -430,15 +467,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       return;
     }
 
-    const res = AuthService.changePassword(currentPassword, newPassword);
+    const res = await AuthService.changePassword(newPassword);
     if (res.success) {
-      showNotification('Administrator password updated successfully!');
+      showNotification('Administrator password updated successfully in Supabase Auth!');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
       setIsChangingPassword(false);
     } else {
-      setPasswordError(res.error || 'Failed to update administrator password.');
+      setPasswordError(res.error || 'Failed to update administrator password in Supabase.');
     }
   };
 

@@ -23,15 +23,24 @@ export const PlaceDetailPage: React.FC<PlaceDetailPageProps> = ({ slug, onNaviga
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
 
   useEffect(() => {
-    const loadedPlace = PlaceService.getPlaceBySlug(slug);
-    if (loadedPlace) {
-      setPlace(loadedPlace);
-      const nearby = PlaceService.getNearbyPlaces(loadedPlace, 3);
-      setNearbyPlaces(nearby);
-      const bookmarks = StorageService.getBookmarks();
-      setIsBookmarked(bookmarks.includes(loadedPlace.id));
-      window.scrollTo(0, 0);
-    }
+    const loadCurrentPlace = () => {
+      const loadedPlace = PlaceService.getPlaceBySlug(slug);
+      if (loadedPlace) {
+        setPlace(loadedPlace);
+        const nearby = PlaceService.getNearbyPlaces(loadedPlace, 3);
+        setNearbyPlaces(nearby);
+        const bookmarks = StorageService.getBookmarks();
+        setIsBookmarked(bookmarks.includes(loadedPlace.id));
+      }
+    };
+
+    loadCurrentPlace();
+    window.scrollTo(0, 0);
+
+    const unsubscribe = StorageService.subscribe(loadCurrentPlace);
+    return () => {
+      unsubscribe();
+    };
   }, [slug]);
 
   if (!place) {

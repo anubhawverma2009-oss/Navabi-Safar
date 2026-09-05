@@ -126,11 +126,11 @@ export const PlaceService = {
     return places;
   },
 
-  // Admin Actions
-  createPlace(placeData: Partial<Place>): Place {
-    const places = StorageService.getPlaces();
+  // Authoritative Database-First Admin Actions
+
+  async createPlace(placeData: Partial<Place>): Promise<Place> {
     const newPlace: Place = {
-      id: 'place_' + Date.now(),
+      id: placeData.id || ('dest_' + Date.now()),
       name: placeData.name || 'New Lucknow Destination',
       slug: placeData.slug || ('dest-' + Date.now()),
       hindiName: placeData.hindiName,
@@ -158,92 +158,79 @@ export const PlaceService = {
       featured: placeData.featured ?? false,
       hiddenGem: placeData.hiddenGem ?? false,
       status: placeData.status || 'published',
-      rating: 4.8,
-      reviewsCount: 150,
+      rating: placeData.rating || 4.8,
+      reviewsCount: placeData.reviewsCount || 10,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
-    places.unshift(newPlace);
-    StorageService.savePlaces(places);
-    StorageService.savePlaceRemote(newPlace).catch(console.warn);
-    return newPlace;
-  },
-
-  updatePlace(id: string, updates: Partial<Place>): boolean {
-    const places = StorageService.getPlaces();
-    const idx = places.findIndex(p => p.id === id);
-    if (idx >= 0) {
-      const updated: Place = {
-        ...places[idx],
-        ...updates,
-        updatedAt: new Date().toISOString()
-      };
-      places[idx] = updated;
-      StorageService.savePlaces(places);
-      StorageService.savePlaceRemote(updated).catch(console.warn);
-      return true;
+    const res = await StorageService.savePlaceRemote(newPlace);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to create destination in database');
     }
-    return false;
+    return res.place || newPlace;
   },
 
-  savePlace(place: Place): Place {
+  async updatePlace(id: string, updates: Partial<Place>): Promise<boolean> {
     const places = StorageService.getPlaces();
-    const index = places.findIndex(p => p.id === place.id);
-    
+    const existing = places.find(p => p.id === id);
+    if (!existing) {
+      throw new Error(`Destination with ID "${id}" not found`);
+    }
+
+    const updated: Place = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+
+    const res = await StorageService.savePlaceRemote(updated);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to update destination in database');
+    }
+    return true;
+  },
+
+  async savePlace(place: Place): Promise<Place> {
     const updatedPlace: Place = {
       ...place,
       updatedAt: new Date().toISOString()
     };
 
-    if (index >= 0) {
-      places[index] = updatedPlace;
-    } else {
-      places.unshift({
-        ...updatedPlace,
-        createdAt: new Date().toISOString()
-      });
+    const res = await StorageService.savePlaceRemote(updatedPlace);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to persist destination in database');
     }
-
-    StorageService.savePlaces(places);
-    StorageService.savePlaceRemote(updatedPlace).catch(console.warn);
-    return updatedPlace;
+    return res.place || updatedPlace;
   },
 
-  deletePlace(id: string): boolean {
-    const places = StorageService.getPlaces();
-    const filtered = places.filter(p => p.id !== id);
-    if (filtered.length !== places.length) {
-      StorageService.savePlaces(filtered);
-      StorageService.deletePlaceRemote(id).catch(console.warn);
-      return true;
+  async deletePlace(id: string): Promise<boolean> {
+    const res = await StorageService.deletePlaceRemote(id);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to delete destination from database');
     }
-    return false;
+    return true;
   },
 
-  toggleFeatured(id: string): boolean {
+  async toggleFeatured(id: string): Promise<boolean> {
     const places = StorageService.getPlaces();
     const place = places.find(p => p.id === id);
-    if (place) {
-      place.featured = !place.featured;
-      place.updatedAt = new Date().toISOString();
-      StorageService.savePlaces(places);
-      StorageService.savePlaceRemote(place).catch(console.warn);
-      return place.featured;
+    if (!place) {
+      throw new Error('Destination not found');
     }
-    return false;
+    const nextFeatured = !place.featured;
+    await this.updatePlace(id, { featured: nextFeatured });
+    return nextFeatured;
   },
 
-  toggleHiddenGem(id: string): boolean {
+  async toggleHiddenGem(id: string): Promise<boolean> {
     const places = StorageService.getPlaces();
     const place = places.find(p => p.id === id);
-    if (place) {
-      place.hiddenGem = !place.hiddenGem;
-      place.updatedAt = new Date().toISOString();
-      StorageService.savePlaces(places);
-      StorageService.savePlaceRemote(place).catch(console.warn);
-      return place.hiddenGem;
+    if (!place) {
+      throw new Error('Destination not found');
     }
-    return false;
+    const nextHiddenGem = !place.hiddenGem;
+    await this.updatePlace(id, { hiddenGem: nextHiddenGem });
+    return nextHiddenGem;
   }
 };

@@ -49,49 +49,49 @@ export const AdminReviewsManager: React.FC = () => {
   }, []);
 
   // Handlers for Place Reviews
-  const handleToggleReviewStatus = (id: string, currentStatus: PlaceReview['status']) => {
+  const handleToggleReviewStatus = async (id: string, currentStatus: PlaceReview['status']) => {
     const nextStatus = currentStatus === 'published' ? 'hidden' : 'published';
-    FeedbackService.updatePlaceReviewStatus(id, nextStatus);
+    await FeedbackService.updatePlaceReviewStatus(id, nextStatus);
   };
 
-  const handleDeleteReview = (id: string) => {
-    if (window.confirm('Are you sure you want to permanently delete this review?')) {
-      FeedbackService.deletePlaceReview(id);
+  const handleDeleteReview = async (id: string) => {
+    if (window.confirm('Are you sure you want to permanently delete this review from the database?')) {
+      await FeedbackService.deletePlaceReview(id);
     }
   };
 
   // Handlers for Platform Feedback
-  const handleUpdateFeedbackStatus = (id: string, status: PlatformFeedback['status']) => {
-    FeedbackService.updateFeedbackStatus(id, status);
+  const handleUpdateFeedbackStatus = async (id: string, status: PlatformFeedback['status']) => {
+    await FeedbackService.updateFeedbackStatus(id, status);
   };
 
-  const handleDeleteFeedback = (id: string) => {
-    if (window.confirm('Delete this feedback item?')) {
-      FeedbackService.deletePlatformFeedback(id);
+  const handleDeleteFeedback = async (id: string) => {
+    if (window.confirm('Delete this feedback item from database?')) {
+      await FeedbackService.deletePlatformFeedback(id);
     }
   };
 
   // Handlers for Suggestions
-  const handleUpdateSuggestionStatus = (id: string, status: Suggestion['status']) => {
-    FeedbackService.updateSuggestionStatus(id, status);
+  const handleUpdateSuggestionStatus = async (id: string, status: Suggestion['status']) => {
+    await FeedbackService.updateSuggestionStatus(id, status);
   };
 
-  const handleDeleteSuggestion = (id: string) => {
-    if (window.confirm('Delete this community suggestion?')) {
-      FeedbackService.deleteSuggestion(id);
+  const handleDeleteSuggestion = async (id: string) => {
+    if (window.confirm('Delete this community suggestion from database?')) {
+      await FeedbackService.deleteSuggestion(id);
     }
   };
 
   // Handlers for Issue Reports
-  const handleSaveReportResolution = (id: string, status: IssueReport['status']) => {
-    FeedbackService.updateIssueReportStatus(id, status, reportAdminNote.trim() || undefined);
+  const handleSaveReportResolution = async (id: string, status: IssueReport['status']) => {
+    await FeedbackService.updateIssueReportStatus(id, status, reportAdminNote.trim() || undefined);
     setEditingReportId(null);
     setReportAdminNote('');
   };
 
-  const handleDeleteReport = (id: string) => {
-    if (window.confirm('Delete this inaccuracy report?')) {
-      FeedbackService.deleteIssueReport(id);
+  const handleDeleteReport = async (id: string) => {
+    if (window.confirm('Delete this inaccuracy report from database?')) {
+      await FeedbackService.deleteIssueReport(id);
     }
   };
 

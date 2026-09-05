@@ -15,7 +15,14 @@ export const EmergencyPage: React.FC<EmergencyPageProps> = ({ onNavigate }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
   useEffect(() => {
-    setServices(StorageService.getEmergencyServices().filter(s => s.enabled));
+    const loadEmergency = () => {
+      setServices(StorageService.getEmergencyServices().filter(s => s.enabled));
+    };
+    loadEmergency();
+    const unsubscribe = StorageService.subscribe(loadEmergency);
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const filtered = activeCategory === 'all'
