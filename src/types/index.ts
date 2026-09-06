@@ -8,7 +8,8 @@ export type PlaceCategory =
   | 'landmarks'
   | 'religious'
   | 'hidden-gems'
-  | 'experiences';
+  | 'experiences'
+  | (string & {});
 
 export type PlaceVibe = 
   | 'Heritage'
@@ -26,7 +27,8 @@ export type PlaceVibe =
   | 'Architecture'
   | 'Romantic'
   | 'Nightlife'
-  | 'Spiritual';
+  | 'Spiritual'
+  | (string & {});
 
 export type BestTimeToVisit = 'Morning' | 'Afternoon' | 'Evening' | 'Sunset' | 'Night' | 'Any Time';
 
@@ -52,6 +54,7 @@ export interface Place {
   area: string; // e.g. "Hussainabad", "Hazratganj", "Gomti Nagar", "Chowk"
   latitude: number;
   longitude: number;
+  googleMapsUrl?: string;
   
   openingTime: string; // e.g. "06:00 AM"
   closingTime: string; // e.g. "06:00 PM"
@@ -65,6 +68,7 @@ export interface Place {
     busRoute?: string;
     autoCabTips?: string;
     parking?: string;
+    googleMapsUrl?: string;
   };
   nearbyPlaceIds?: string[];
   
@@ -112,7 +116,7 @@ export type BusinessStatus =
 export interface LocalBusiness {
   id: string;
   name: string;
-  category: 'restaurant' | 'cafe' | 'handicrafts' | 'guide' | 'hotel' | 'sweets' | 'attire';
+  category: 'restaurant' | 'cafe' | 'handicrafts' | 'guide' | 'hotel' | 'sweets' | 'attire' | 'food' | 'craft' | 'attar' | 'jewelry' | 'heritage' | 'services' | (string & {});
   description: string;
   address: string;
   area: string;
@@ -120,6 +124,7 @@ export interface LocalBusiness {
   image: string;
   images?: string[];
   websiteUrl?: string;
+  googleMapsUrl?: string;
   specialty: string;
   featured: boolean;
   status: BusinessStatus;

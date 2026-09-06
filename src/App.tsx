@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { StorageService } from './services/storageService';
 import { PlaceService } from './services/placeService';
 import { AuthService } from './services/authService';
+import { VisitorService } from './services/visitorService';
 import { Navbar } from './components/layout/Navbar';
 import { MobileDrawer } from './components/layout/MobileDrawer';
 import { Footer } from './components/layout/Footer';
@@ -43,11 +44,14 @@ export default function App() {
   // Initialize seed & update count
   useEffect(() => {
     StorageService.initSeedData();
+    VisitorService.initVisitorTracking();
     setSavedCount(StorageService.getBookmarks().length);
 
     // Listen to popstate
     const handlePopState = () => {
-      setCurrentRoute(window.location.pathname + window.location.search || '/');
+      const newPath = window.location.pathname + window.location.search || '/';
+      setCurrentRoute(newPath);
+      VisitorService.recordPageVisit(newPath);
     };
     window.addEventListener('popstate', handlePopState);
 
@@ -86,6 +90,7 @@ export default function App() {
     setQuickSearchOpen(false);
     setSearchQuery('');
     setSavedCount(StorageService.getBookmarks().length);
+    VisitorService.recordPageVisit(route);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

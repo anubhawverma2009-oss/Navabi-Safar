@@ -3,8 +3,11 @@ import { Place, LocalBusiness, EmergencyService, CategoryInfo, VibeInfo, PlaceCa
 import { PlaceService } from '../../services/placeService';
 import { StorageService } from '../../services/storageService';
 import { AuthService } from '../../services/authService';
+import { VisitorService } from '../../services/visitorService';
 import { isSupabaseConfigured, testSupabaseConnection } from '../../lib/supabaseClient';
 import { AdminReviewsManager } from '../../components/admin/AdminReviewsManager';
+import { PlaceFormModal } from '../../components/admin/PlaceFormModal';
+import { BusinessFormModal } from '../../components/admin/BusinessFormModal';
 import { 
   Landmark, Plus, Edit2, Trash2, CheckCircle2, XCircle, Search, 
   Sparkles, Flame, Gem, Store, ShieldAlert, Database, RotateCcw, 
@@ -27,6 +30,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [platformVisitorsCount, setPlatformVisitorsCount] = useState<number>(() => VisitorService.getPlatformVisitorCountSync());
 
   // Password Management State
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -37,60 +41,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
   // Place Modal / Form State
   const [isEditingPlace, setIsEditingPlace] = useState(false);
-  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
-  const [placeFormData, setPlaceFormData] = useState<Partial<Place>>({
-    name: '',
-    hindiName: '',
-    slug: '',
-    category: 'historical',
-    subcategory: '',
-    shortDescription: '',
-    description: '',
-    story: '',
-    coverImage: '',
-    galleryImages: [],
-    latitude: 26.8687,
-    longitude: 80.9135,
-    area: 'Hussainabad',
-    address: 'Lucknow, Uttar Pradesh',
-    openingTime: '06:00 AM',
-    closingTime: '05:00 PM',
-    entryFee: 'Free',
-    estimatedBudget: 0,
-    bestTime: 'Morning',
-    recommendedDuration: '2 Hours',
-    vibes: ['Heritage'],
-    whyVisit: [],
-    howToReach: {
-      nearestMetro: '',
-      autoCabTips: '',
-      busRoute: '',
-      parking: ''
-    },
-    featured: false,
-    hiddenGem: false,
-    status: 'published'
-  });
-
-  // Gallery URLs text helper
-  const [galleryInput, setGalleryInput] = useState('');
-  const [whyVisitInput, setWhyVisitInput] = useState('');
+  const [selectedPlaceForEdit, setSelectedPlaceForEdit] = useState<Place | null>(null);
+  const [isSavingPlace, setIsSavingPlace] = useState(false);
 
   // Business Modal / Form State
   const [isEditingBusiness, setIsEditingBusiness] = useState(false);
-  const [editingBusinessId, setEditingBusinessId] = useState<string | null>(null);
-  const [businessFormData, setBusinessFormData] = useState<Partial<LocalBusiness>>({
-    name: '',
-    category: 'attire',
-    specialty: '',
-    description: '',
-    image: '',
-    area: 'Chowk',
-    address: 'Lucknow, Uttar Pradesh',
-    contactNumber: '+91 522 2256000',
-    featured: true,
-    status: 'published'
-  });
+  const [selectedBusinessForEdit, setSelectedBusinessForEdit] = useState<LocalBusiness | null>(null);
+  const [isSavingBusiness, setIsSavingBusiness] = useState(false);
 
   // Emergency Modal / Form State
   const [isEditingEmergency, setIsEditingEmergency] = useState(false);
@@ -113,20 +70,57 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   const [seedResult, setSeedResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    // Check if user is logged in
-    if (!AuthService.isLoggedIn()) {
-      onNavigate('/admin/login');
-      return;
+    let isMounted = true;
+
+    async function initAdmin() {
+      // Check if user is logged in
+      if (!AuthService.isLoggedIn()) {
+        onNavigate('/admin/login');
+        return;
+      }
+
+      // Authoritatively verify with Supabase Auth to refresh token
+      if (isSupabaseConfigured()) {
+        const verified = await AuthService.verifySession();
+        if (!verified && isMounted) {
+          showNotification('Admin session expired. Please sign in again.', 'error');
+          onNavigate('/admin/login');
+          return;
+        }
+      }
+
+      if (isMounted) {
+        loadData();
+      }
+
+      // Fetch authoritative platform visitor count from Supabase
+      VisitorService.getPlatformVisitorCount().then(cnt => {
+        if (isMounted) {
+          setPlatformVisitorsCount(cnt);
+        }
+      });
     }
-    loadData();
+
+    initAdmin();
 
     // Subscribe to remote storage sync updates
     const unsubscribe = StorageService.subscribe(() => {
-      loadData();
+      if (isMounted) {
+        loadData();
+      }
+    });
+
+    // Subscribe to live Realtime platform visitor counter
+    const unsubscribeVisitors = VisitorService.subscribe(() => {
+      if (isMounted) {
+        setPlatformVisitorsCount(VisitorService.getPlatformVisitorCountSync());
+      }
     });
 
     return () => {
+      isMounted = false;
       unsubscribe();
+      unsubscribeVisitors();
     };
   }, []);
 
@@ -187,92 +181,33 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   // PLACE HANDLERS
   // -------------------------------------------------------------
   const handleOpenNewPlace = () => {
-    setEditingPlaceId(null);
-    setPlaceFormData({
-      name: '',
-      hindiName: '',
-      slug: '',
-      category: 'historical',
-      subcategory: 'Monument',
-      shortDescription: '',
-      description: '',
-      story: '',
-      coverImage: 'https://images.unsplash.com/photo-1599661046289-e31897846e41?auto=format&fit=crop&w=1000&q=80',
-      galleryImages: [],
-      latitude: 26.8687,
-      longitude: 80.9135,
-      area: 'Hussainabad',
-      address: 'Lucknow, Uttar Pradesh',
-      openingTime: '06:00 AM',
-      closingTime: '05:00 PM',
-      entryFee: 'Free',
-      estimatedBudget: 0,
-      bestTime: 'Morning',
-      recommendedDuration: '2 Hours',
-      vibes: ['Heritage'],
-      whyVisit: ['Witness historic Lakhnawi craftsmanship'],
-      howToReach: {
-        nearestMetro: 'Chowk / Hussainabad metro access',
-        autoCabTips: 'E-rickshaws widely available from Charbagh',
-        busRoute: 'City bus routes to Hussainabad',
-        parking: 'Public parking available outside'
-      },
-      featured: false,
-      hiddenGem: false,
-      status: 'published'
-    });
-    setGalleryInput('');
-    setWhyVisitInput('Witness historic Lakhnawi craftsmanship\nAdmire 18th century vaulted architecture');
+    setSelectedPlaceForEdit(null);
     setIsEditingPlace(true);
   };
 
   const handleOpenEditPlace = (place: Place) => {
-    setEditingPlaceId(place.id);
-    setPlaceFormData({ ...place });
-    setGalleryInput((place.galleryImages || []).join('\n'));
-    setWhyVisitInput((place.whyVisit || []).join('\n'));
+    setSelectedPlaceForEdit(place);
     setIsEditingPlace(true);
   };
 
-  const handleSavePlace = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!placeFormData.name || !placeFormData.description) {
-      showNotification('Place Name and Description are required', 'error');
-      return;
-    }
-
-    const galleries = galleryInput
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const whyVisits = whyVisitInput
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const finalSlug = placeFormData.slug?.trim() || 
-      placeFormData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
-    const payload: Partial<Place> = {
-      ...placeFormData,
-      slug: finalSlug,
-      galleryImages: galleries.length > 0 ? galleries : [placeFormData.coverImage || ''],
-      whyVisit: whyVisits
-    };
-
+  const handleSavePlaceModal = async (payload: Partial<Place>) => {
+    setIsSavingPlace(true);
     try {
-      if (editingPlaceId) {
-        await PlaceService.updatePlace(editingPlaceId, payload);
+      if (selectedPlaceForEdit && selectedPlaceForEdit.id) {
+        await PlaceService.updatePlace(selectedPlaceForEdit.id, payload);
         showNotification(`Updated "${payload.name}" in database successfully!`);
       } else {
         await PlaceService.createPlace(payload as any);
         showNotification(`Created new destination "${payload.name}" in database!`);
       }
       setIsEditingPlace(false);
-      loadData();
+      setSelectedPlaceForEdit(null);
+      await loadData();
     } catch (err: any) {
       showNotification(err.message || 'Database write failed. Check your admin permissions.', 'error');
+      throw err;
+    } finally {
+      setIsSavingPlace(false);
     }
   };
 
@@ -312,40 +247,35 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
   // BUSINESS HANDLERS
   // -------------------------------------------------------------
   const handleOpenNewBusiness = () => {
-    setEditingBusinessId(null);
-    setBusinessFormData({
-      name: '',
-      category: 'attire',
-      specialty: 'Authentic Chikankari Work',
-      description: 'Generations-old craft shop in Old Lucknow.',
-      image: 'https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=800&q=80',
-      area: 'Chowk',
-      address: 'Chowk, Lucknow, Uttar Pradesh',
-      contactNumber: '+91 522 2256000',
-      featured: true,
-      status: 'published'
-    });
+    setSelectedBusinessForEdit(null);
     setIsEditingBusiness(true);
   };
 
-  const handleSaveBusiness = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!businessFormData.name) return;
+  const handleOpenEditBusiness = (biz: LocalBusiness) => {
+    setSelectedBusinessForEdit(biz);
+    setIsEditingBusiness(true);
+  };
 
+  const handleSaveBusinessModal = async (businessData: Partial<LocalBusiness>) => {
+    setIsSavingBusiness(true);
     try {
-      if (editingBusinessId) {
-        const res = await StorageService.updateBusiness(editingBusinessId, businessFormData);
+      if (selectedBusinessForEdit && selectedBusinessForEdit.id) {
+        const res = await StorageService.updateBusiness(selectedBusinessForEdit.id, businessData);
         if (!res.success) throw new Error(res.error || 'Failed to update business');
-        showNotification('Updated local business in database successfully');
+        showNotification(`Updated "${businessData.name}" in database successfully`);
       } else {
-        const res = await StorageService.addBusiness(businessFormData as any);
+        const res = await StorageService.addBusiness(businessData as any);
         if (!res.success) throw new Error(res.error || 'Failed to add business');
-        showNotification('Added new local business to database successfully');
+        showNotification(`Added new local business "${businessData.name}" to database`);
       }
       setIsEditingBusiness(false);
-      loadData();
+      setSelectedBusinessForEdit(null);
+      await loadData();
     } catch (err: any) {
       showNotification(err.message || 'Failed to save business', 'error');
+      throw err;
+    } finally {
+      setIsSavingBusiness(false);
     }
   };
 
@@ -591,8 +521,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
           <div className="bg-white rounded-2xl p-4 border border-stone-200/80 shadow-sm col-span-2 sm:col-span-1">
             <div className="text-[11px] font-bold uppercase tracking-wider text-stone-500">Platform Visitors</div>
-            <div className="text-2xl font-bold text-stone-900 mt-1 font-serif-heading">{stats.totalVisitors}</div>
-            <div className="text-[10px] text-stone-400 mt-0.5">Session Counter</div>
+            <div className="text-2xl font-bold text-stone-900 mt-1 font-serif-heading">{platformVisitorsCount.toLocaleString()}</div>
+            <div className="text-[10px] text-stone-400 mt-0.5">Unique Visitors</div>
           </div>
         </div>
 
@@ -842,11 +772,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
 
                   <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-end gap-2">
                     <button
-                      onClick={() => {
-                        setEditingBusinessId(b.id);
-                        setBusinessFormData({ ...b });
-                        setIsEditingBusiness(true);
-                      }}
+                      onClick={() => handleOpenEditBusiness(b)}
                       className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 cursor-pointer"
                     >
                       Edit
@@ -1191,469 +1117,32 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
       {/* ------------------------------------------------------------- */}
       {/* PLACE EDIT / ADD MODAL */}
       {/* ------------------------------------------------------------- */}
-      {isEditingPlace && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 shadow-2xl border border-stone-200 my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-stone-200 mb-6">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
-                  {editingPlaceId ? 'Edit Destination' : 'New Destination'}
-                </span>
-                <h3 className="text-2xl font-bold font-serif-heading text-stone-900">
-                  {placeFormData.name || 'Untitled Destination'}
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsEditingPlace(false)}
-                className="p-2 rounded-full hover:bg-stone-100 text-stone-500"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePlace} className="space-y-6 text-xs sm:text-sm">
-              {/* Row 1: Names */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="font-bold text-stone-700 block mb-1">Place Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={placeFormData.name || ''}
-                    onChange={e => setPlaceFormData({ ...placeFormData, name: e.target.value })}
-                    placeholder="e.g. Bara Imambara"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50 focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Hindi Name</label>
-                  <input
-                    type="text"
-                    value={placeFormData.hindiName || ''}
-                    onChange={e => setPlaceFormData({ ...placeFormData, hindiName: e.target.value })}
-                    placeholder="e.g. बड़ा इमामबाड़ा"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50 focus:ring-2 focus:ring-amber-500 font-serif"
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Category & Area */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Category *</label>
-                  <select
-                    value={placeFormData.category || 'historical'}
-                    onChange={e => setPlaceFormData({ ...placeFormData, category: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50 focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="historical">Historical & Heritage</option>
-                    <option value="food">Food & Awadhi</option>
-                    <option value="shopping">Shopping & Bazaars</option>
-                    <option value="parks">Parks & Nature</option>
-                    <option value="culture">Culture & Museums</option>
-                    <option value="spiritual">Spiritual</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Subcategory</label>
-                  <input
-                    type="text"
-                    value={placeFormData.subcategory || ''}
-                    onChange={e => setPlaceFormData({ ...placeFormData, subcategory: e.target.value })}
-                    placeholder="e.g. Awadhi Monument / Kebab Stall"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Locality / Area *</label>
-                  <input
-                    type="text"
-                    required
-                    value={placeFormData.area || ''}
-                    onChange={e => setPlaceFormData({ ...placeFormData, area: e.target.value })}
-                    placeholder="e.g. Hussainabad / Chowk / Hazratganj"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-              </div>
-
-              {/* Row 3: Descriptions */}
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Short One-Line Summary</label>
-                <input
-                  type="text"
-                  value={placeFormData.shortDescription || ''}
-                  onChange={e => setPlaceFormData({ ...placeFormData, shortDescription: e.target.value })}
-                  placeholder="e.g. 18th-century royal architectural complex famous for Bhool Bhulaiya."
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Detailed Description *</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={placeFormData.description || ''}
-                  onChange={e => setPlaceFormData({ ...placeFormData, description: e.target.value })}
-                  placeholder="Comprehensive description of the place, significance, and experience..."
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Historical & Cultural Story</label>
-                <textarea
-                  rows={2}
-                  value={placeFormData.story || ''}
-                  onChange={e => setPlaceFormData({ ...placeFormData, story: e.target.value })}
-                  placeholder="Royal background, Nawab patrons, famine relief origin, folk tales..."
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50 italic font-serif"
-                />
-              </div>
-
-              {/* Row 4: Images */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Cover Image URL *</label>
-                  <input
-                    type="url"
-                    required
-                    value={placeFormData.coverImage || ''}
-                    onChange={e => setPlaceFormData({ ...placeFormData, coverImage: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Additional Photo URLs (1 per line)</label>
-                  <textarea
-                    rows={2}
-                    value={galleryInput}
-                    onChange={e => setGalleryInput(e.target.value)}
-                    placeholder="https://...\nhttps://..."
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50 font-mono text-xs"
-                  />
-                </div>
-              </div>
-
-              {/* Row 5: Coordinates & Address */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Latitude (e.g. 26.8687)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={placeFormData.latitude || 26.8687}
-                    onChange={e => setPlaceFormData({ ...placeFormData, latitude: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Longitude (e.g. 80.9135)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={placeFormData.longitude || 80.9135}
-                    onChange={e => setPlaceFormData({ ...placeFormData, longitude: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Full Postal Address</label>
-                  <input
-                    type="text"
-                    value={placeFormData.address || ''}
-                    onChange={e => setPlaceFormData({ ...placeFormData, address: e.target.value })}
-                    placeholder="Machchhi Bhavan, Lucknow, Uttar Pradesh 226003"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-              </div>
-
-              {/* Row 6: Timings, Fees & Budget */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Opening Time</label>
-                  <input
-                    type="text"
-                    value={placeFormData.openingTime || '06:00 AM'}
-                    onChange={e => setPlaceFormData({ ...placeFormData, openingTime: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Closing Time</label>
-                  <input
-                    type="text"
-                    value={placeFormData.closingTime || '05:00 PM'}
-                    onChange={e => setPlaceFormData({ ...placeFormData, closingTime: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Entry Fee</label>
-                  <input
-                    type="text"
-                    value={placeFormData.entryFee || 'Free'}
-                    onChange={e => setPlaceFormData({ ...placeFormData, entryFee: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Est. Budget (₹ / person)</label>
-                  <input
-                    type="number"
-                    value={placeFormData.estimatedBudget ?? 0}
-                    onChange={e => setPlaceFormData({ ...placeFormData, estimatedBudget: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-              </div>
-
-              {/* Row 7: Why Visit Bullets */}
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Why Visit Highlights (1 point per line)</label>
-                <textarea
-                  rows={2}
-                  value={whyVisitInput}
-                  onChange={e => setWhyVisitInput(e.target.value)}
-                  placeholder="Point 1\nPoint 2\nPoint 3"
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              {/* Switches */}
-              <div className="flex flex-wrap items-center gap-6 p-4 rounded-2xl bg-stone-50 border border-stone-200">
-                <label className="flex items-center gap-2 font-bold cursor-pointer text-stone-800">
-                  <input
-                    type="checkbox"
-                    checked={placeFormData.featured || false}
-                    onChange={e => setPlaceFormData({ ...placeFormData, featured: e.target.checked })}
-                    className="w-4 h-4 accent-amber-600 rounded"
-                  />
-                  <span>Featured Destination (Hero Showcase)</span>
-                </label>
-
-                <label className="flex items-center gap-2 font-bold cursor-pointer text-stone-800">
-                  <input
-                    type="checkbox"
-                    checked={placeFormData.hiddenGem || false}
-                    onChange={e => setPlaceFormData({ ...placeFormData, hiddenGem: e.target.checked })}
-                    className="w-4 h-4 accent-teal-600 rounded"
-                  />
-                  <span>Hidden Gem (Off-the-beaten-track)</span>
-                </label>
-              </div>
-
-              <div className="pt-4 border-t border-stone-200 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingPlace(false)}
-                  className="px-5 py-2.5 rounded-xl border border-stone-300 text-stone-700 font-semibold hover:bg-stone-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold shadow-md transition-all flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save Destination</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <PlaceFormModal
+        isOpen={isEditingPlace}
+        onClose={() => {
+          setIsEditingPlace(false);
+          setSelectedPlaceForEdit(null);
+        }}
+        onSave={handleSavePlaceModal}
+        initialData={selectedPlaceForEdit}
+        existingPlaces={places}
+        isSaving={isSavingPlace}
+      />
 
       {/* ------------------------------------------------------------- */}
       {/* BUSINESS EDIT / ADD MODAL */}
       {/* ------------------------------------------------------------- */}
-      {isEditingBusiness && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200 mb-5">
-              <h3 className="text-xl font-bold font-serif-heading text-stone-900">
-                {editingBusinessId ? 'Edit Local Merchant' : 'Add Local Merchant'}
-              </h3>
-              <button onClick={() => setIsEditingBusiness(false)} className="p-1 text-stone-400 hover:text-stone-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveBusiness} className="space-y-4 text-xs sm:text-sm">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Business Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={businessFormData.name || ''}
-                    onChange={e => setBusinessFormData({ ...businessFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Category</label>
-                  <select
-                    value={businessFormData.category || 'food'}
-                    onChange={e => setBusinessFormData({ ...businessFormData, category: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  >
-                    <option value="food">Food & Awadhi Delicacies</option>
-                    <option value="craft">Chikan & Handicrafts</option>
-                    <option value="attar">Perfumes & Attar</option>
-                    <option value="jewelry">Jewelry & Antiques</option>
-                    <option value="heritage">Heritage Goods & Souvenirs</option>
-                    <option value="services">Local Guides & Services</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Price Range</label>
-                  <select
-                    value={businessFormData.priceRange || '₹₹'}
-                    onChange={e => setBusinessFormData({ ...businessFormData, priceRange: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  >
-                    <option value="₹">₹ - Budget Friendly</option>
-                    <option value="₹₹">₹₹ - Moderate</option>
-                    <option value="₹₹₹">₹₹₹ - Premium</option>
-                    <option value="₹₹₹₹">₹₹₹₹ - Royal Luxury</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center pt-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={businessFormData.featured || false}
-                      onChange={e => setBusinessFormData({ ...businessFormData, featured: e.target.checked })}
-                      className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
-                    />
-                    <span className="font-bold text-stone-700">Featured Business</span>
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Specialty / Subtitle *</label>
-                <input
-                  type="text"
-                  required
-                  value={businessFormData.specialty || ''}
-                  onChange={e => setBusinessFormData({ ...businessFormData, specialty: e.target.value })}
-                  placeholder="e.g. Authentic Galawati Kebabs Since 1905"
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Description</label>
-                <textarea
-                  rows={2}
-                  value={businessFormData.description || ''}
-                  onChange={e => setBusinessFormData({ ...businessFormData, description: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Owner / Manager Name</label>
-                  <input
-                    type="text"
-                    value={businessFormData.ownerName || ''}
-                    onChange={e => setBusinessFormData({ ...businessFormData, ownerName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Phone Number</label>
-                  <input
-                    type="text"
-                    value={businessFormData.contactNumber || ''}
-                    onChange={e => setBusinessFormData({ ...businessFormData, contactNumber: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Area / Neighborhood</label>
-                  <input
-                    type="text"
-                    value={businessFormData.area || ''}
-                    onChange={e => setBusinessFormData({ ...businessFormData, area: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-stone-700 block mb-1">Operating Hours</label>
-                  <input
-                    type="text"
-                    value={businessFormData.openingHours || ''}
-                    onChange={e => setBusinessFormData({ ...businessFormData, openingHours: e.target.value })}
-                    placeholder="e.g. 10:00 AM - 10:00 PM"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Full Address</label>
-                <input
-                  type="text"
-                  value={businessFormData.address || ''}
-                  onChange={e => setBusinessFormData({ ...businessFormData, address: e.target.value })}
-                  placeholder="e.g. Shop 14, Aminabad Market, Lucknow"
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-stone-700 block mb-1">Image URL</label>
-                <input
-                  type="url"
-                  value={businessFormData.image || ''}
-                  onChange={e => setBusinessFormData({ ...businessFormData, image: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-300 bg-stone-50"
-                />
-              </div>
-
-              <div className="pt-4 flex items-center justify-end gap-2 border-t border-stone-200">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingBusiness(false)}
-                  className="px-4 py-2 rounded-xl border border-stone-300 text-stone-700 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 text-stone-950 font-bold shadow-md hover:bg-amber-500 transition-colors"
-                >
-                  Save Business Record
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <BusinessFormModal
+        isOpen={isEditingBusiness}
+        onClose={() => {
+          setIsEditingBusiness(false);
+          setSelectedBusinessForEdit(null);
+        }}
+        onSave={handleSaveBusinessModal}
+        initialData={selectedBusinessForEdit}
+        existingBusinesses={businesses}
+        isSaving={isSavingBusiness}
+      />
 
       {/* ------------------------------------------------------------- */}
       {/* EMERGENCY EDIT / ADD MODAL */}

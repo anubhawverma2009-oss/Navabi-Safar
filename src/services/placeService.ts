@@ -147,6 +147,7 @@ export const PlaceService = {
       area: placeData.area || 'Hussainabad',
       latitude: placeData.latitude || 26.8687,
       longitude: placeData.longitude || 80.9135,
+      googleMapsUrl: placeData.googleMapsUrl || placeData.howToReach?.googleMapsUrl || undefined,
       openingTime: placeData.openingTime || '06:00 AM',
       closingTime: placeData.closingTime || '05:00 PM',
       entryFee: placeData.entryFee || 'Free',

@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS public.places (
     image_credits TEXT,
     address TEXT NOT NULL,
     area TEXT NOT NULL,
+    google_maps_url TEXT,
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     opening_time TEXT NOT NULL DEFAULT '06:00 AM',
@@ -102,6 +103,7 @@ CREATE TABLE IF NOT EXISTS public.local_businesses (
     contact_number TEXT NOT NULL,
     image TEXT NOT NULL,
     website_url TEXT,
+    google_maps_url TEXT,
     specialty TEXT NOT NULL DEFAULT '',
     featured BOOLEAN NOT NULL DEFAULT true,
     status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'draft')),
@@ -318,4 +320,38 @@ CREATE POLICY "Admins manage issue reports"
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
+
+-- ------------------------------------------------------------------------------
+-- 7. PLATFORM VISITOR ANALYTICS TABLE (ANONYMOUS UNIQUE VISITOR TRACKING)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.site_visitors (
+    visitor_id TEXT PRIMARY KEY,
+    first_seen TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    session_id TEXT,
+    visit_count INTEGER NOT NULL DEFAULT 1,
+    last_path TEXT DEFAULT '/',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_visitors_first_seen ON public.site_visitors(first_seen);
+CREATE INDEX IF NOT EXISTS idx_site_visitors_last_seen ON public.site_visitors(last_seen);
+
+ALTER TABLE public.site_visitors ENABLE ROW LEVEL SECURITY;
+
+-- Allow anonymous visitors to register or update their own visit
+CREATE POLICY "Public insert site visitors"
+    ON public.site_visitors FOR INSERT
+    WITH CHECK (true);
+
+CREATE POLICY "Public update own visitor record"
+    ON public.site_visitors FOR UPDATE
+    USING (true)
+    WITH CHECK (true);
+
+-- Allow everyone to query site visitors count
+CREATE POLICY "Public read site visitors"
+    ON public.site_visitors FOR SELECT
+    USING (true);
+
 

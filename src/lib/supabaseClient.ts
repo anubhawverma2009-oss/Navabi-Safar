@@ -103,6 +103,7 @@ export async function testSupabaseConnection(): Promise<{
 // ------------------------------------------------------------------------------
 
 export function mapDbPlaceToModel(row: any): Place {
+  const gMapsUrl = row.google_maps_url || row.how_to_reach?.googleMapsUrl || row.how_to_reach?.google_maps_url || undefined;
   return {
     id: row.id,
     name: row.name || '',
@@ -122,13 +123,17 @@ export function mapDbPlaceToModel(row: any): Place {
     area: row.area || 'Lucknow',
     latitude: Number(row.latitude) || 26.8467,
     longitude: Number(row.longitude) || 80.9462,
+    googleMapsUrl: gMapsUrl,
     openingTime: row.opening_time || '06:00 AM',
     closingTime: row.closing_time || '06:00 PM',
     entryFee: row.entry_fee || 'Free',
     estimatedBudget: Number(row.estimated_budget) || 0,
     bestTime: row.best_time || 'Any Time',
     recommendedDuration: row.recommended_duration || '2 Hours',
-    howToReach: row.how_to_reach || {},
+    howToReach: {
+      ...(row.how_to_reach || {}),
+      googleMapsUrl: gMapsUrl
+    },
     nearbyPlaceIds: Array.isArray(row.nearby_place_ids) ? row.nearby_place_ids : [],
     featured: Boolean(row.featured),
     hiddenGem: Boolean(row.hidden_gem),
@@ -141,6 +146,7 @@ export function mapDbPlaceToModel(row: any): Place {
 }
 
 export function mapModelPlaceToDb(place: Place): any {
+  const gMapsUrl = place.googleMapsUrl || place.howToReach?.googleMapsUrl || null;
   return {
     id: place.id,
     name: place.name,
@@ -158,15 +164,19 @@ export function mapModelPlaceToDb(place: Place): any {
     image_credits: place.imageCredits || null,
     address: place.address,
     area: place.area,
-    latitude: place.latitude,
-    longitude: place.longitude,
+    google_maps_url: gMapsUrl,
+    latitude: place.latitude || 26.8467,
+    longitude: place.longitude || 80.9462,
     opening_time: place.openingTime,
     closing_time: place.closingTime,
     entry_fee: place.entryFee,
     estimated_budget: place.estimatedBudget,
     best_time: place.bestTime,
     recommended_duration: place.recommendedDuration,
-    how_to_reach: place.howToReach || {},
+    how_to_reach: {
+      ...(place.howToReach || {}),
+      googleMapsUrl: gMapsUrl || undefined
+    },
     nearby_place_ids: place.nearbyPlaceIds || [],
     featured: Boolean(place.featured),
     hidden_gem: Boolean(place.hiddenGem),
@@ -178,6 +188,7 @@ export function mapModelPlaceToDb(place: Place): any {
 }
 
 export function mapDbBusinessToModel(row: any): LocalBusiness {
+  const isGmaps = row.website_url && (row.website_url.includes('maps') || row.website_url.includes('goo.gl'));
   return {
     id: row.id,
     name: row.name,
@@ -187,7 +198,8 @@ export function mapDbBusinessToModel(row: any): LocalBusiness {
     area: row.area,
     contactNumber: row.contact_number,
     image: row.image,
-    websiteUrl: row.website_url || undefined,
+    websiteUrl: (row.google_maps_url ? row.website_url : (!isGmaps ? row.website_url : undefined)) || undefined,
+    googleMapsUrl: row.google_maps_url || (isGmaps ? row.website_url : undefined),
     specialty: row.specialty || '',
     featured: Boolean(row.featured),
     status: row.status || 'published',
@@ -200,14 +212,15 @@ export function mapModelBusinessToDb(biz: LocalBusiness): any {
     id: biz.id,
     name: biz.name,
     category: biz.category,
-    description: biz.description,
+    description: biz.description || '',
     address: biz.address,
     area: biz.area,
     contact_number: biz.contactNumber,
     image: biz.image,
     website_url: biz.websiteUrl || null,
-    specialty: biz.specialty,
-    featured: biz.featured,
+    google_maps_url: biz.googleMapsUrl || null,
+    specialty: biz.specialty || '',
+    featured: Boolean(biz.featured),
     status: biz.status,
     created_at: biz.createdAt || new Date().toISOString()
   };

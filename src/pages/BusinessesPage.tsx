@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LocalBusiness } from '../types';
 import { StorageService } from '../services/storageService';
-import { Store, Phone, MapPin, Globe, Sparkles, Tag, ArrowRight, ShieldCheck, CheckCircle2, Building2 } from 'lucide-react';
+import { Store, Phone, MapPin, Globe, Sparkles, Tag, ArrowRight, ShieldCheck, CheckCircle2, Building2, Navigation } from 'lucide-react';
 
 interface BusinessesPageProps {
   onNavigate: (route: string) => void;
@@ -147,15 +147,38 @@ export const BusinessesPage: React.FC<BusinessesPageProps> = ({ onNavigate }) =>
                   </div>
                 </div>
 
-                <div className="p-6 pt-0 flex items-center gap-3">
+                <div className="p-6 pt-0 flex items-center gap-2">
                   <a
                     href={`tel:${biz.contactNumber}`}
                     className="flex-1 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs text-center flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                   >
                     <Phone className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Call {biz.contactNumber}</span>
+                    <span>Call</span>
                   </a>
-                  {biz.websiteUrl && (
+                  {(biz.googleMapsUrl || (biz.websiteUrl && (biz.websiteUrl.includes('maps') || biz.websiteUrl.includes('goo.gl')))) ? (
+                    <a
+                      href={biz.googleMapsUrl || biz.websiteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3.5 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                      title="Get Directions in Google Maps"
+                    >
+                      <Navigation className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Directions</span>
+                    </a>
+                  ) : (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(biz.name + ', ' + biz.area + ', Lucknow')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center gap-1 transition-colors border border-amber-200"
+                      title="Find on Google Maps"
+                    >
+                      <Navigation className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Directions</span>
+                    </a>
+                  )}
+                  {biz.websiteUrl && !biz.websiteUrl.includes('maps') && !biz.websiteUrl.includes('goo.gl') && (
                     <a
                       href={biz.websiteUrl}
                       target="_blank"

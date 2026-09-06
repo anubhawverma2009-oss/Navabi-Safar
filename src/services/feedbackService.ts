@@ -251,25 +251,25 @@ export const FeedbackService = {
         supabase.from('issue_reports').select('*').order('created_at', { ascending: false })
       ]);
 
-      if (revRes.data && revRes.data.length > 0) {
+      if (Array.isArray(revRes.data)) {
         const mapped = revRes.data.map(mapDbReviewToModel);
         cachedReviews = mapped;
         localStorage.setItem(FEEDBACK_STORAGE_KEYS.PLACE_REVIEWS, JSON.stringify(mapped));
       }
 
-      if (fbRes.data && fbRes.data.length > 0) {
+      if (Array.isArray(fbRes.data)) {
         const mapped = fbRes.data.map(mapDbFeedbackToModel);
         cachedPlatformFeedback = mapped;
         localStorage.setItem(FEEDBACK_STORAGE_KEYS.PLATFORM_FEEDBACK, JSON.stringify(mapped));
       }
 
-      if (sugRes.data && sugRes.data.length > 0) {
+      if (Array.isArray(sugRes.data)) {
         const mapped = sugRes.data.map(mapDbSuggestionToModel);
         cachedSuggestions = mapped;
         localStorage.setItem(FEEDBACK_STORAGE_KEYS.SUGGESTIONS, JSON.stringify(mapped));
       }
 
-      if (issRes.data && issRes.data.length > 0) {
+      if (Array.isArray(issRes.data)) {
         const mapped = issRes.data.map(mapDbIssueToModel);
         cachedIssueReports = mapped;
         localStorage.setItem(FEEDBACK_STORAGE_KEYS.ISSUE_REPORTS, JSON.stringify(mapped));

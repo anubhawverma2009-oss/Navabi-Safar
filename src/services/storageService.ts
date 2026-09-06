@@ -555,6 +555,7 @@ export const StorageService = {
       area: biz.area || 'Chowk',
       contactNumber: biz.contactNumber || '+91 522 2256000',
       websiteUrl: biz.websiteUrl,
+      googleMapsUrl: biz.googleMapsUrl,
       featured: biz.featured ?? true,
       status: biz.status || 'published',
       createdAt: new Date().toISOString()
@@ -593,7 +594,7 @@ export const StorageService = {
    * Authoritative Business Update:
    * Updates Supabase first; commits to local state on success.
    */
-  async updateBusiness(id: string, updates: Partial<LocalBusiness>): Promise<{ success: boolean; error?: string }> {
+  async updateBusiness(id: string, updates: Partial<LocalBusiness>): Promise<{ success: boolean; error?: string; business?: LocalBusiness }> {
     const list = this.getBusinesses().slice();
     const idx = list.findIndex(b => b.id === id);
     if (idx < 0) {
@@ -606,14 +607,19 @@ export const StorageService = {
     if (supabase) {
       try {
         const dbPayload = mapModelBusinessToDb(updated);
-        dbPayload.updated_at = new Date().toISOString();
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('local_businesses')
-          .upsert(dbPayload, { onConflict: 'id' });
+          .upsert(dbPayload, { onConflict: 'id' })
+          .select()
+          .single();
 
         if (error) {
-          return { success: false, error: `Supabase business update failed: ${error.message}` };
+          return { success: false, error: `Supabase business update failed (${error.code || 'RLS'}): ${error.message}` };
         }
+        const persisted = data ? mapDbBusinessToModel(data) : updated;
+        list[idx] = persisted;
+        this.saveBusinessesLocal(list);
+        return { success: true, business: persisted };
       } catch (e: any) {
         return { success: false, error: e.message || 'Business update exception' };
       }
@@ -621,7 +627,7 @@ export const StorageService = {
 
     list[idx] = updated;
     this.saveBusinessesLocal(list);
-    return { success: true };
+    return { success: true, business: updated };
   },
 
   /**
@@ -734,7 +740,7 @@ export const StorageService = {
    * Authoritative Emergency Service Update:
    * Updates Supabase first.
    */
-  async updateEmergencyService(id: string, updates: Partial<EmergencyService>): Promise<{ success: boolean; error?: string }> {
+  async updateEmergencyService(id: string, updates: Partial<EmergencyService>): Promise<{ success: boolean; error?: string; service?: EmergencyService }> {
     const list = this.getEmergencyServices().slice();
     const idx = list.findIndex(s => s.id === id);
     if (idx < 0) {
@@ -747,14 +753,19 @@ export const StorageService = {
     if (supabase) {
       try {
         const dbPayload = mapModelEmergencyToDb(updated);
-        dbPayload.updated_at = new Date().toISOString();
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('emergency_services')
-          .upsert(dbPayload, { onConflict: 'id' });
+          .upsert(dbPayload, { onConflict: 'id' })
+          .select()
+          .single();
 
         if (error) {
-          return { success: false, error: `Supabase emergency update failed: ${error.message}` };
+          return { success: false, error: `Supabase emergency update failed (${error.code || 'RLS'}): ${error.message}` };
         }
+        const persisted = data ? mapDbEmergencyToModel(data) : updated;
+        list[idx] = persisted;
+        this.saveEmergencyServicesLocal(list);
+        return { success: true, service: persisted };
       } catch (e: any) {
         return { success: false, error: e.message || 'Emergency update exception' };
       }
@@ -762,7 +773,7 @@ export const StorageService = {
 
     list[idx] = updated;
     this.saveEmergencyServicesLocal(list);
-    return { success: true };
+    return { success: true, service: updated };
   },
 
   /**

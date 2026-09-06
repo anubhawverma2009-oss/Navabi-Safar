@@ -236,7 +236,11 @@ export const MapPage: React.FC<MapPageProps> = ({ onNavigate }) => {
                         <span>→</span>
                       </button>
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${selectedPlace.latitude},${selectedPlace.longitude}`}
+                        href={
+                          selectedPlace.googleMapsUrl ||
+                          selectedPlace.howToReach?.googleMapsUrl ||
+                          `https://www.google.com/maps/search/?api=1&query=${selectedPlace.latitude},${selectedPlace.longitude}`
+                        }
                         target="_blank"
                         rel="noopener noreferrer"
                         className="w-full py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs text-center transition-colors flex items-center justify-center gap-1.5 border border-stone-200"

@@ -360,10 +360,17 @@ export const PlaceDetailPage: React.FC<PlaceDetailPageProps> = ({ slug, onNaviga
               {/* Action Buttons */}
               <div className="pt-4 border-t border-stone-100 space-y-2.5">
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`}
+                  href={
+                    place.googleMapsUrl ||
+                    place.howToReach?.googleMapsUrl ||
+                    (place.latitude && place.longitude
+                      ? `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`
+                      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ', ' + place.area + ', Lucknow')}`)
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full py-3 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs sm:text-sm text-center flex items-center justify-center gap-2 shadow-md transition-all"
+                  id="place-get-directions-btn"
                 >
                   <Navigation className="w-4 h-4" />
                   <span>Get Live Directions</span>

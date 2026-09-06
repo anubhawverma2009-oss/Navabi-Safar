@@ -506,3 +506,18 @@ INSERT INTO public.issue_reports (
 ) ON CONFLICT (id) DO UPDATE SET
   status = EXCLUDED.status, admin_notes = EXCLUDED.admin_notes;
 
+-- ------------------------------------------------------------------------------
+-- 8. SITE VISITORS (Initial verified anonymous visitors)
+-- ------------------------------------------------------------------------------
+INSERT INTO public.site_visitors (
+  visitor_id, first_seen, last_seen, session_id, visit_count, last_path, created_at
+) VALUES 
+  ('vid_seed_001_delhi', NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 hour', 'sid_seed_001', 4, '/', NOW() - INTERVAL '3 days'),
+  ('vid_seed_002_mumbai', NOW() - INTERVAL '2 days', NOW() - INTERVAL '4 hours', 'sid_seed_002', 2, '/places/bara-imambara', NOW() - INTERVAL '2 days'),
+  ('vid_seed_003_bengaluru', NOW() - INTERVAL '1 day', NOW() - INTERVAL '30 minutes', 'sid_seed_003', 3, '/map', NOW() - INTERVAL '1 day'),
+  ('vid_seed_004_lucknow', NOW() - INTERVAL '5 hours', NOW() - INTERVAL '10 minutes', 'sid_seed_004', 1, '/build-my-day', NOW() - INTERVAL '5 hours')
+ON CONFLICT (visitor_id) DO UPDATE SET
+  last_seen = EXCLUDED.last_seen,
+  visit_count = site_visitors.visit_count + 1;
+
+

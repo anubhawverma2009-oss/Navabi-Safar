@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Place, CategoryInfo, VibeInfo, LocalBusiness } from '../types';
 import { PlaceService } from '../services/placeService';
 import { StorageService } from '../services/storageService';
+import { VisitorService } from '../services/visitorService';
 import { PlaceCard } from '../components/common/PlaceCard';
 import { CategoryCard } from '../components/common/CategoryCard';
 import { VibeCard } from '../components/common/VibeCard';
@@ -21,25 +22,34 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [vibes, setVibes] = useState<VibeInfo[]>([]);
   const [businesses, setBusinesses] = useState<LocalBusiness[]>([]);
-  const [stats, setStats] = useState(StorageService.getStats());
+  const [visitorCount, setVisitorCount] = useState<number>(() => VisitorService.getPlatformVisitorCountSync());
 
   useEffect(() => {
-    // Increment visitor count on page load
-    const updatedStats = StorageService.incrementVisitorCount();
-    setStats(updatedStats);
+    let isMounted = true;
 
     const loadAll = () => {
       setPlaces(PlaceService.getPublishedPlaces());
       setCategories(StorageService.getCategories().filter(c => c.enabled));
       setVibes(StorageService.getVibes());
       setBusinesses(StorageService.getBusinesses().filter(b => b.status === 'published' && b.featured));
-      setStats(StorageService.getStats());
     };
 
     loadAll();
 
-    const unsubscribe = StorageService.subscribe(loadAll);
-    return () => unsubscribe();
+    VisitorService.getPlatformVisitorCount().then(cnt => {
+      if (isMounted) setVisitorCount(cnt);
+    });
+
+    const unsubscribeStorage = StorageService.subscribe(loadAll);
+    const unsubscribeVisitors = VisitorService.subscribe(() => {
+      if (isMounted) setVisitorCount(VisitorService.getPlatformVisitorCountSync());
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribeStorage();
+      unsubscribeVisitors();
+    };
   }, []);
 
   const featuredPlaces = places.filter(p => p.featured).slice(0, 6);
@@ -137,7 +147,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
       {/* 2. DYNAMIC STATS SECTION: LUCKNOW AT A GLANCE */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-12 relative z-20">
-        <StatsCounter places={places} visitorCount={stats.totalVisitors} />
+        <StatsCounter places={places} visitorCount={visitorCount} />
       </section>
 
       {/* 3. FEATURED LUCKNOW SECTION */}
